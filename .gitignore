@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+.venv/
+.venvpython312/
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Local models and generated ML/vector artifacts
+artifacts/
+ollama-models/
+models/
+*.joblib
+*.pkl
+*.pickle
+faiss_index/
+chroma/
+
+# Terraform local state and caches
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Local tooling files
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
