@@ -18,7 +18,7 @@ NumPy       -> drift calculations
 FastAPI     -> HTTP API -> Ollama chat model
 ```
 
-The files under `local/GenAI` and `local/Predictive ML` are executable examples. The Docker, Kubernetes, Terraform, test, and root dependency files are currently scaffolding for later phases.
+The files under `local/GenAI_ollama` and `local/Predictive ML` are executable examples. The Docker, Kubernetes, Terraform, test, and root dependency files are currently scaffolding for later phases.
 
 ## Before Running the Code
 
@@ -68,7 +68,7 @@ ollama list
 
 ## Ollama Configuration
 
-`local/GenAI/src/ollama_config.py` is the shared configuration boundary. It reads these optional environment variables:
+`local/GenAI_ollama/src/ollama_config.py` is the shared configuration boundary. It reads these optional environment variables:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -94,7 +94,7 @@ Imports for the Ollama package are inside the factory functions. This keeps conf
 
 ## Python Files
 
-### `local/GenAI/src/01_langchain_local.py`
+### `local/GenAI_ollama/src/01_langchain_local.py`
 
 Purpose: demonstrate the smallest LangChain-to-Ollama path.
 
@@ -108,12 +108,12 @@ Code flow:
 Run it:
 
 ```powershell
-python "local/GenAI/src/01_langchain_local.py"
+python "local/GenAI_ollama/src/01_langchain_local.py"
 ```
 
 This is the best first smoke test because it verifies that Python, LangChain, Ollama, and the chat model are connected.
 
-### `local/GenAI/src/02_rag_local.py`
+### `local/GenAI_ollama/src/02_rag_local.py`
 
 Purpose: demonstrate local retrieval-augmented generation using FAISS.
 
@@ -130,12 +130,12 @@ Code flow:
 Run it:
 
 ```powershell
-python "local/GenAI/src/02_rag_local.py"
+python "local/GenAI_ollama/src/02_rag_local.py"
 ```
 
 FAISS is a local vector search library, not a hosted database. The current implementation rebuilds the index on each run. A later improvement can persist it with `save_local()` and reload it with `load_local()`.
 
-### `local/GenAI/src/03_langgraph_local.py`
+### `local/GenAI_ollama/src/03_langgraph_local.py`
 
 Purpose: demonstrate a stateful LangGraph workflow.
 
@@ -150,7 +150,7 @@ Code flow:
 Run it:
 
 ```powershell
-python "local/GenAI/src/03_langgraph_local.py"
+python "local/GenAI_ollama/src/03_langgraph_local.py"
 ```
 
 The graph is intentionally small. Later nodes can be added for retrieval, guardrail checks, tool calls, evaluation, retries, or human approval.
@@ -205,7 +205,7 @@ python "local/Predictive ML/src/01_model_training.py"
 
 The saved artifact is a local example of the model package that a future SageMaker pipeline can create, register, evaluate, and deploy.
 
-### `local/GenAI/src/04_api_server.py`
+### `local/GenAI_ollama/src/04_api_server.py`
 
 Purpose: expose the local chat model through an HTTP API.
 
@@ -225,13 +225,13 @@ The request body for `/ask` is:
 Start the API:
 
 ```powershell
-uvicorn local.GenAI.src.04_api_server:app --host 127.0.0.1 --port 8000
+uvicorn local.GenAI_ollama.src.04_api_server:app --host 127.0.0.1 --port 8000
 ```
 
 Because Python module names cannot normally be imported with a leading numeric filename using standard dotted syntax, the most reliable option after changing into `local/GenAI/src` is:
 
 ```powershell
-cd local/GenAI/src
+cd local/GenAI_ollama/src
 uvicorn 04_api_server:app --host 127.0.0.1 --port 8000
 ```
 
@@ -290,9 +290,9 @@ The Python package `langchain-ollama` is only the connector. It does not include
 
 ### `local/`
 
-- `local/README.md`: local Ollama setup, model flow, Python file descriptions, testing commands, and troubleshooting.
+- `local/GenAI_ollama/README.md`: local Ollama setup, model flow, Python file descriptions, testing commands, and troubleshooting.
 - `local/requirements.txt`: dependencies for the Ollama, RAG, training, drift, and API examples.
-- `local/GenAI/`: Ollama, LangChain, LangGraph, RAG, and API examples.
+- `local/GenAI_ollama/`: Ollama, LangChain, LangGraph, RAG, and API examples.
 - `local/Predictive ML/`: drift detection and predictive model training examples.
 
 ### `tests/`
@@ -320,7 +320,7 @@ The Python package `langchain-ollama` is only the connector. It does not include
 
 ## Recommended Implementation Order
 
-1. Install local packages and verify the Ollama chat model with `GenAI/src/01_langchain_local.py`.
+1. Install local packages and verify the Ollama chat model with `GenAI_ollama/src/01_langchain_local.py`.
 2. Verify `nomic-embed-text` and run the FAISS RAG example.
 3. Expand the LangGraph workflow with retrieval and validation nodes.
 4. Add unit tests for drift, training, API validation, and RAG helpers.

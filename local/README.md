@@ -1,172 +1,60 @@
-# Local Ollama Development
+# Local development notes
 
-This folder contains the local MLOps and GenAI examples. The local workflow uses Ollama for free, locally hosted models, FAISS for local vector search, and Python 3.14 in the project `.venv`.
+This folder is kept as a legacy container for the older local project layout. The active Ollama-specific instructions now live in [GenAI_ollama/README.md](GenAI_ollama/README.md).
 
-## Setup
+Use the Ollama-specific folder for all local setup, reruns, troubleshooting, and secure-RAG guidance.
 
-From the project root in PowerShell:
+## Why the Ollama README moved
+
+The local project was split so that the Ollama-specific setup is separated from the broader local ML examples. This keeps the documentation focused on the model runtime, the local API, and the security pattern used for RAG.
+
+## Fastest way to re-run the local Ollama examples
+
+From the project root:
 
 ```powershell
 cd E:\Projects\mlops-genai-project
 . .\.venv\Scripts\Activate.ps1
-```
-
-If PowerShell says that running scripts is disabled, use the temporary policy for the current session:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-. .\.venv\Scripts\Activate.ps1
-```
-
-Verify the environment and install the Python packages:
-
-```powershell
-python --version
-python -m pip install -r local/requirements.txt
-```
-
-## Ollama Models
-
-Ollama is a separate Windows application. The Python package `ollama` is only a client that communicates with the Ollama server; it does not install the server or AI models.
-
-Install Ollama from https://ollama.com/download/windows, then open a new PowerShell window and verify it:
-
-```powershell
-ollama --version
-```
-
-Pull the lightweight chat model and the embedding model:
-
-```powershell
-ollama pull llama3.2:1b
-ollama pull nomic-embed-text
-ollama list
-```
-
-If Ollama is not already running, start it in a separate PowerShell window and leave that window open:
-
-```powershell
-ollama serve
-```
-
-Configure this project to use the lightweight model:
-
-```powershell
 $env:OLLAMA_BASE_URL = "http://localhost:11434"
 $env:OLLAMA_CHAT_MODEL = "llama3.2:1b"
 $env:OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
+
+ollama serve
+python "local/GenAI_ollama/src/01_langchain_local.py"
+python "local/GenAI_ollama/src/02_rag_local.py"
 ```
 
-## How the Local Flow Works
+## Do you need to pull Ollama models again after a reboot?
 
-The Python code does not run the AI model directly. It sends a request through LangChain or LangGraph to the Ollama server. Ollama then passes the request to the downloaded `llama3.2:1b` model and returns the answer.
+Usually no.
 
-```text
-Python application -> LangChain/LangGraph -> Ollama server
-							   |
-							   v
-						   llama3.2:1b
-							   |
-							   v
-						   answer to Python
-```
+Ollama stores the downloaded models on disk. After a reboot, the models remain installed unless you explicitly delete them or run a fresh install. What typically restarts is the local Ollama service, not the model package itself.
 
-The RAG flow is slightly different:
-
-```text
-Documents -> nomic-embed-text -> FAISS vector search
-Question  -> nomic-embed-text -> relevant document chunks
-Question plus context -> Ollama -> llama3.2:1b -> answer
-```
-
-FAISS is free and runs locally. It does not require a cloud database or AWS account.
-
-## Direct Chat vs RAG
-
-The direct chat script, `01_langchain_local.py`, sends the question straight to the chat model:
-
-```text
-Question -> Ollama -> llama3.2:1b -> answer
-```
-
-The RAG script, `02_rag_local.py`, searches the local FAISS index first. It then sends the question and the retrieved document context to Ollama:
-
-```text
-Question -> nomic-embed-text -> FAISS search -> relevant context
-Question plus context -> Ollama -> llama3.2:1b -> answer
-```
-
-FAISS finds the relevant information; it does not write the answer. Ollama generates the final response using the retrieved context.
-
-Both scripts may produce similar answers for general questions because `llama3.2:1b` already knows common topics. RAG becomes useful when the answer depends on private or project-specific documents that were added to the index.
-
-## Local Python Files
-
-- `GenAI/src/ollama_config.py`: Shared Ollama URL, chat model, embedding model, and LangChain factory functions.
-- `GenAI/src/01_langchain_local.py`: Sends a simple question to `llama3.2:1b` through LangChain.
-- `GenAI/src/02_rag_local.py`: Embeds documents with `nomic-embed-text`, searches them with FAISS, and asks Ollama for a context-based answer.
-- `GenAI/src/03_langgraph_local.py`: Runs a small stateful LangGraph workflow with Ollama.
-- `Predictive ML/src/01_model_training.py`: Trains a local scikit-learn classifier and saves `artifacts/iris_model.joblib`.
-- `Predictive ML/src/02_drift_detection.py`: Calculates Population Stability Index and reports stable, warning, or alert status.
-- `GenAI/src/04_api_server.py`: Exposes `/health` and `/ask` through FastAPI; `/ask` sends questions to Ollama.
-
-## Test the Local Workflow
-
-Run the non-Ollama examples first:
-
-```powershell
-python "local/Predictive ML/src/01_model_training.py"
-python "local/Predictive ML/src/02_drift_detection.py"
-```
-
-Then test the Ollama chat and RAG examples:
-
-```powershell
-python "local/GenAI/src/01_langchain_local.py"
-python "local/GenAI/src/02_rag_local.py"
-python "local/GenAI/src/03_langgraph_local.py"
-```
-
-Run the automated test suite:
-
-```powershell
-python -m pytest
-```
-
-Start the API from the `local/GenAI` directory:
-
-```powershell
-cd local/GenAI/src
-uvicorn 04_api_server:app --host 127.0.0.1 --port 8000
-```
-
-From another PowerShell window, check the API:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/ask -ContentType "application/json" -Body '{"question":"What is MLOps?"}'
-```
-
-## Troubleshooting
-
-### `ollama` is not recognized
-
-Install the Ollama Windows application and open a new PowerShell window so the command is added to `PATH`.
-
-### Connection refused at port `11434`
-
-Start the local server:
+If you reboot and the service is not running, do this:
 
 ```powershell
 ollama serve
+ollama list
 ```
 
-### Model not found
+If you see the model names in `ollama list`, you do not need to run `ollama pull` again. You only pull again if the model is missing, deleted, or the install was corrupted.
 
-Check installed models and pull them again if necessary:
+## Why the port conflict happens
+
+Ollama binds to port `11434` on localhost. Windows does not allow two processes to use the same port. If a previous `ollama.exe` is still running, a second `ollama serve` call fails with a socket-binding error.
+
+Check the active listener:
 
 ```powershell
-ollama list
-ollama pull llama3.2:1b
-ollama pull nomic-embed-text
+Get-NetTCPConnection -LocalPort 11434
+Get-Process -Name ollama
 ```
+
+If a process is already alive, leave it running. If you need to restart it, stop the old one first:
+
+```powershell
+Stop-Process -Name ollama -Force
+ollama serve
+```
+
+This is why a reboot can look like a fresh environment even though the model is still installed: the OS may keep a background `ollama.exe` session alive or restart the service automatically.

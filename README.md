@@ -105,31 +105,90 @@ Install the lightweight local Ollama chat model and the embedding model used for
 ollama pull llama3.2:1b
 ollama pull nomic-embed-text
 ollama list
+
 Start Ollama in a separate PowerShell window if it is not already running:
 
 ollama serve
+
 Use the lightweight chat model for this project:
 
+$env:OLLAMA_BASE_URL = "http://localhost:11434"
 $env:OLLAMA_CHAT_MODEL = "llama3.2:1b"
 $env:OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
+
 Then run the local examples from the repository root as described in Running Each Script.
+
+## GenAI Local Ollama Setup
+
+Follow these steps whenever you want to test the local GenAI scripts again.
+
+1. Open a new PowerShell window and start the Ollama server:
+
+```powershell
+ollama serve
+```
+
+2. In the project terminal, activate the Python environment:
+
+```powershell
+cd E:\Projects\mlops-genai-project
+. .\.venv\Scripts\Activate.ps1
+```
+
+3. Set the environment variables for the local models:
+
+```powershell
+$env:OLLAMA_BASE_URL = "http://localhost:11434"
+$env:OLLAMA_CHAT_MODEL = "llama3.2:1b"
+$env:OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
+```
+
+4. If the models are not already installed, pull them:
+
+```powershell
+ollama pull llama3.2:1b
+ollama pull nomic-embed-text
+ollama list
+```
+
+5. Run the local GenAI examples from the repository root:
+
+```powershell
+python "local/GenAI_ollama/src/01_langchain_local.py"
+python "local/GenAI_ollama/src/02_rag_local.py"
+```
+
+6. Type a question such as:
+
+```text
+What is MLOps?
+```
+
+Then type:
+
+```text
+exit
+```
+
+This is the correct local workflow for testing the GenAI scripts: start Ollama first, then run the Python scripts.
 
 Project Structure
 .
 |-- local/
-|   |-- README.md
 |   |-- requirements.txt
 |   |-- Predictive ML/
 |   |   `-- src/
 |   |       |-- 01_model_training.py
 |   |       `-- 02_drift_detection.py
-|   `-- GenAI/
+|   `-- GenAI_ollama/
+|       |-- README.md
 |       `-- src/
 |           |-- 01_langchain_local.py
 |           |-- 02_rag_local.py
 |           |-- 03_langgraph_local.py
 |           |-- 04_api_server.py
-|           `-- ollama_config.py
+|           |-- ollama_config.py
+|           `-- privacy.py
 |-- tests/
 |   |-- test_api.py
 |   |-- test_drift.py
@@ -151,13 +210,14 @@ Project Structure
 `-- README.md
 File Descriptions
 Local source
-local/README.md: Local Ollama setup, model flow, Python files, and testing commands.
-local/GenAI/src/01_langchain_local.py: Local LangChain orchestration example.
-local/GenAI/src/02_rag_local.py: Local RAG workflow using a vector index such as FAISS.
-local/GenAI/src/03_langgraph_local.py: LangGraph workflow demonstrating stateful or multi-step agent orchestration.
+local/GenAI_ollama/README.md: Local Ollama setup, model flow, secure-RAG guidance, and troubleshooting.
+local/GenAI_ollama/src/01_langchain_local.py: Local LangChain orchestration example.
+local/GenAI_ollama/src/02_rag_local.py: Local RAG workflow using FAISS plus masked context and source-of-truth handling.
+local/GenAI_ollama/src/privacy.py: Redaction, access filtering, sanitization, and source-of-truth helpers.
+local/GenAI_ollama/src/03_langgraph_local.py: LangGraph workflow demonstrating stateful or multi-step agent orchestration.
 local/Predictive ML/src/02_drift_detection.py: Data or feature drift detection and monitoring example.
 local/Predictive ML/src/01_model_training.py: Model preprocessing, training, and evaluation workflow.
-local/GenAI/src/04_api_server.py: API entry point for serving the project functionality.
+local/GenAI_ollama/src/04_api_server.py: API entry point for serving the project functionality.
 Tests and dependencies
 tests/: Automated tests for the API, drift detection, and preprocessing/training behavior.
 requirements.txt: Shared project dependencies.
@@ -201,12 +261,12 @@ Keep credentials out of source control. Store configuration in environment varia
 Running Each Script
 Run commands from the repository root:
 
-python "local/GenAI/src/01_langchain_local.py"
-python "local/GenAI/src/02_rag_local.py"
-python "local/GenAI/src/03_langgraph_local.py"
+python "local/GenAI_ollama/src/01_langchain_local.py"
+python "local/GenAI_ollama/src/02_rag_local.py"
+python "local/GenAI_ollama/src/03_langgraph_local.py"
 python "local/Predictive ML/src/02_drift_detection.py"
 python "local/Predictive ML/src/01_model_training.py"
-python "local/GenAI/src/04_api_server.py"
+python "local/GenAI_ollama/src/04_api_server.py"
 The scripts are currently placeholders, so these commands will not provide useful output until their implementations and dependencies are added. The intended execution order for a completed local workflow is:
 
 Run the LangChain and LangGraph examples.
