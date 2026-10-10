@@ -1,0 +1,83 @@
+{
+  "PRD001": {
+    "status": "active",
+    "product_name": "Entresto",
+    "category": "Cardiovascular",
+    "launch_date": "2020-01-01",
+    "analog_sku": null,
+    "notes": "seeded from PRODUCTS in config.py"
+  },
+  "PRD002": {
+    "status": "active",
+    "product_name": "Cosentyx",
+    "category": "Immunology",
+    "launch_date": "2020-01-01",
+    "analog_sku": null,
+    "notes": "seeded from PRODUCTS in config.py"
+  },
+  "PRD003": {
+    "status": "active",
+    "product_name": "Kisqali",
+    "category": "Oncology",
+    "launch_date": "2020-01-01",
+    "analog_sku": null,
+    "notes": "seeded from PRODUCTS in config.py"
+  },
+  "PRD004": {
+    "status": "active",
+    "product_name": "Jardiance",
+    "category": "Diabetes",
+    "launch_date": "2020-01-01",
+    "analog_sku": null,
+    "notes": "seeded from PRODUCTS in config.py"
+  },
+  "PRD005": {
+    "status": "active",
+    "product_name": "Dupixent",
+    "category": "Immunology",
+    "launch_date": "2020-01-01",
+    "analog_sku": null,
+    "notes": "seeded from PRODUCTS in config.py"
+  },
+  "PRD006": {
+    "status": "active",
+    "product_name": "Trulicity",
+    "category": "Diabetes",
+    "launch_date": "2020-01-01",
+    "analog_sku": null,
+    "notes": "seeded from PRODUCTS in config.py"
+  },
+  "PRD007": {
+    "status": "active",
+    "product_name": "Imbruvica",
+    "category": "Oncology",
+    "launch_date": "2020-01-01",
+    "analog_sku": null,
+    "notes": "seeded from PRODUCTS in config.py"
+  },
+  "PRD008": {
+    "status": "active",
+    "product_name": "Xeljanz",
+    "category": "Immunology",
+    "launch_date": "2020-01-01",
+    "analog_sku": null,
+    "notes": "seeded from PRODUCTS in config.py"
+  },
+  "PRD009": {
+    "status": "active",
+    "product_name": "Farxiga",
+    "category": "Diabetes",
+    "launch_date": "2020-01-01",
+    "analog_sku": null,
+    "notes": "seeded from PRODUCTS in config.py"
+  },
+  "PRD010": {
+    "status": "active",
+    "product_name": "Revlimid",
+    "category": "Oncology",
+    "launch_date": "2020-01-01",
+    "analog_sku": null,
+    "notes": "seeded from PRODUCTS in config.py"
+  },
+  "_README": "to simulate a product launch, set status to 'launch' and analog_sku to the sku of the exisitrng product so that we can predict the cost with low confidence and once the status is active after some monts on sales data it will be high onlyto simulate a product retirement, set status to 'retired' and analog_sku to the sku of the exisitrng product so that we can predict the cost with low confidence and once the status is retired after some months on sales data it will be high only"
+}

@@ -1,0 +1,12 @@
+# Runtime data and state are mounted by Docker Compose, not baked into images.
+data/
+mlruns/
+model/
+monitoring/
+predictions/
+
+# Local development artifacts.
+.venv/
+__pycache__/
+*.py[cod]
+*.db

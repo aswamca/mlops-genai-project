@@ -1,0 +1,7 @@
+# Isolate PredML Kubernetes resources from other workloads in the cluster.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: predml
+  labels:
+    app.kubernetes.io/part-of: predml

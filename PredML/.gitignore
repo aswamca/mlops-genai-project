@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+
+/data/01_raw/
+/data/02_processed/
+/data/03_features_store/
+/mlruns/
+/model/registry/
+/monitoring/baseline/
+/monitoring/reports/
+/predictions/

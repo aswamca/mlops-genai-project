@@ -1,0 +1,100 @@
+# ============================================================================
+# PredML local development stack: MLflow tracking/registry, realtime API, and
+# an on-demand batch job.
+#
+# Usage (run from the PredML directory):
+#   docker compose -f docker/docker-compose.yml build                 # build all images
+#   docker compose -f docker/docker-compose.yml up -d --build mlflow api # start services
+#   docker compose -f docker/docker-compose.yml run --rm -e STAGE=01_preprocess batch
+#   docker compose -f docker/docker-compose.yml stop mlflow            # stop MLflow
+#   docker compose -f docker/docker-compose.yml down                  # stop services
+#
+# Raw data is intentionally not generated in these containers. Provide the raw
+# input CSV under ./data/01_raw before running the preprocessing stage.
+# ============================================================================
+services:
+  # --------------------------------------------------------------------------
+  # MLflow server: model registry, experiment tracking, and tracking UI.
+  # --------------------------------------------------------------------------
+  mlflow:
+    build:
+      context: ..
+      dockerfile: docker/mlflow.Dockerfile
+    image: predml-local/mlflow:latest
+    container_name: predml-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persist the SQLite tracking database and model artifacts on the host.
+      - ../mlruns:/app/PredML/mlruns
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"
+      interval: 15s
+      timeout: 15s
+      retries: 6
+      start_period: 60s
+
+  # --------------------------------------------------------------------------
+  # Realtime API: FastAPI /predict, /forecast, and /health endpoints.
+  # --------------------------------------------------------------------------
+  api:
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+    image: predml-local/api:latest
+    container_name: predml-api
+    environment:
+      # Use the Compose service name for internal container-to-container traffic.
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "8000:8000"
+    volumes:
+      # Share input features, registry files, and generated output with the host.
+      - ../data:/app/PredML/data
+      - ../mlruns:/app/PredML/mlruns
+      - ../model:/app/PredML/model
+      - ../predictions:/app/PredML/predictions
+      - ../monitoring:/app/PredML/monitoring
+    restart: unless-stopped
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # Batch job: run one selected pipeline script with STAGE; use with run, not up.
+  # --------------------------------------------------------------------------
+  batch:
+    build:
+      context: ..
+      dockerfile: docker/batch.Dockerfile
+    image: predml-local/batch:latest
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      # The original experiment was created with a Windows-local artifact URI.
+      # Keep Docker runs in a new experiment backed by MLflow's artifact proxy.
+      MLFLOW_EXPERIMENT: pharmacy_cost_forecasting_docker
+    volumes:
+      # Read source data and persist all batch outputs outside the container.
+      - ../data:/app/PredML/data
+      - ../mlruns:/app/PredML/mlruns
+      - ../model:/app/PredML/model
+      - ../predictions:/app/PredML/predictions
+      - ../monitoring:/app/PredML/monitoring
+    depends_on:
+      mlflow:
+        condition: service_healthy

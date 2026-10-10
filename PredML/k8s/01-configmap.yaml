@@ -1,0 +1,9 @@
+# Shared non-secret configuration. Credentials should use a Kubernetes Secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: predml-config
+  namespace: predml
+data:
+  # MLflow is reachable through the in-cluster service DNS name.
+  MLFLOW_TRACKING_URI: "http://mlflow:5000"

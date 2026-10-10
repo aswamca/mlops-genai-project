@@ -1,0 +1,66 @@
+# Persistent data shared by API and batch pods. These ReadWriteOnce claims
+# are suitable for a local/single-node cluster; multi-node clusters may need
+# a storage class that supports ReadWriteMany for shared volumes.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: predml-data-pvc
+  namespace: predml
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+# MLflow SQLite backend and model artifacts must survive pod replacement.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: predml-mlruns-pvc
+  namespace: predml
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Stores challenger/production pointer files used by the training pipeline.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: predml-model-pvc
+  namespace: predml
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Stores batch and future forecast CSV output.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: predml-predictions-pvc
+  namespace: predml
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+# Stores monitoring baselines and drift reports.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: predml-monitoring-pvc
+  namespace: predml
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

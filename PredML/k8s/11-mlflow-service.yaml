@@ -1,0 +1,18 @@
+# Internal endpoint used by the API and batch workloads.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: predml
+  labels:
+    app.kubernetes.io/name: mlflow
+    app.kubernetes.io/part-of: predml
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mlflow
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
+      protocol: TCP

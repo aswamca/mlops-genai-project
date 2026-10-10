@@ -1,0 +1,90 @@
+PredML Docker / Docker Compose
+==============================
+
+Build each image -
+
+docker build -f docker/api.Dockerfile -t predml-local/api:latest .
+docker build -f docker/batch.Dockerfile -t predml-local/batch:latest .
+docker build -f docker/mlflow.Dockerfile -t predml-local/mlflow:latest .
+
+Build each image with docker compose
+
+docker compose -f docker/docker-compose.yml build api
+docker compose -f docker/docker-compose.yml build batch
+docker compose -f docker/docker-compose.yml build mlflow
+
+Build all three once
+
+docker compose -f docker/docker-compose.yml build
+
+
+
+Run these commands from the PredML directory:
+
+    docker compose -f docker/docker-compose.yml build
+
+Start the MLflow tracking server and UI:
+
+    docker compose -f docker/docker-compose.yml up -d --build mlflow
+
+Open http://localhost:5000 for the MLflow UI. The database and model artifacts
+are persisted under ./mlruns on the host.
+
+Raw input data is not included in any image. Place raw_data_pharma_transactions.csv
+at ./data/01_raw/raw_data_pharma_transactions.csv before running preprocessing.
+Docker Compose mounts ./data, ./mlruns, ./model, ./monitoring, and ./predictions
+from the host so batch outputs and registry state persist outside the containers.
+The raw-data generation script (00_generate_raw_data.py) is not copied into either
+application image.
+The API and batch images install separate dependency files from docker/:
+requirements-api.txt for serving/forecasting and requirements-batch.txt for
+preprocessing, training, inference, monitoring, forecasting, and rollback. The
+MLflow image installs MLflow directly and does not use either requirements file.
+
+Run batch stages by setting `STAGE` to the script name without `.py`:
+
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=01_preprocess batch
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=02_feature_engineering batch
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=03_feature_store batch
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=04_train_model batch
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=05_register_model batch
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=06_batch_inference batch
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=08_model_monitoring batch baseline
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=08_model_monitoring batch monitor
+
+For forecasting and rollback, for example:
+
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=09_forecast batch --frequency monthly --start 2026-01-01 --end 2026-12-31
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=10_rollback batch --list
+
+Stop only the MLflow container when desired:
+
+    docker compose -f docker/docker-compose.yml stop mlflow
+
+The original `pharmacy_cost_forecasting` experiment was created with a
+Windows-local artifact path, which is not accessible inside Docker. Docker
+batch training uses `pharmacy_cost_forecasting_docker` with MLflow artifact
+proxying instead. To create a model artifact usable by batch inference, rebuild
+and retrain, then register/promote the new model:
+
+    docker compose -f docker/docker-compose.yml up -d --build mlflow
+    docker compose -f docker/docker-compose.yml build batch
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=04_train_model batch
+    docker compose -f docker/docker-compose.yml run --rm -e STAGE=05_register_model batch
+
+Then run `06_batch_inference`. If stage 5 does not promote the new version
+because its metric does not beat the old champion, first review the candidate;
+only then explicitly assign its version with
+`docker compose -f docker/docker-compose.yml run --rm -e STAGE=10_rollback batch --to-version VERSION`.
+
+`STAGE=00_generate_raw_data` is explicitly rejected because the data generator
+is not copied into the batch image. Run it on the host from PredML with
+`python src/00_generate_raw_data.py`.
+
+Start the API after a champion model and online feature store have been created:
+
+    docker compose -f docker/docker-compose.yml up -d api
+
+The API is available at http://localhost:8000. It exposes POST /predict,
+POST /forecast, and GET /health (plus interactive docs at /docs). The forecast
+endpoint writes its CSV output to ./predictions/forecast on the host.

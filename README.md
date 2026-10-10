@@ -274,6 +274,7 @@ Build and query the local RAG index.
 Train or load a model with the training script.
 Run drift detection against reference and current datasets.
 Start the API server and exercise it with the API tests.
+
 Infrastructure Deployment
 Review and customize Terraform variables before provisioning anything:
 
