@@ -1,0 +1,62 @@
+# One-shot copy of the current local runtime state into Kubernetes PVCs.
+# Scale mlflow and predml-api to zero before running this job so SQLite and
+# model files are not changed while they are in use.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: predml-seed
+  namespace: predml
+  labels:
+    app.kubernetes.io/name: predml-seed
+    app.kubernetes.io/part-of: predml
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: predml-seed
+        app.kubernetes.io/part-of: predml
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: predml-local/seed:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              cp -a /seed/data/. /target-data/
+              cp -a /seed/mlruns/. /target-mlruns/
+              cp -a /seed/model/. /target-model/
+              cp -a /seed/predictions/. /target-predictions/
+              cp -a /seed/monitoring/. /target-monitoring/
+              echo "PredML PVC seed completed"
+          volumeMounts:
+            - name: data
+              mountPath: /target-data
+            - name: mlruns
+              mountPath: /target-mlruns
+            - name: model
+              mountPath: /target-model
+            - name: predictions
+              mountPath: /target-predictions
+            - name: monitoring
+              mountPath: /target-monitoring
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: predml-data-pvc
+        - name: mlruns
+          persistentVolumeClaim:
+            claimName: predml-mlruns-pvc
+        - name: model
+          persistentVolumeClaim:
+            claimName: predml-model-pvc
+        - name: predictions
+          persistentVolumeClaim:
+            claimName: predml-predictions-pvc
+        - name: monitoring
+          persistentVolumeClaim:
+            claimName: predml-monitoring-pvc

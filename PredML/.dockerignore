@@ -5,6 +5,19 @@ model/
 monitoring/
 predictions/
 
+# The seed image intentionally packages the current runtime state for the
+# Kubernetes PVC seed Job.
+!data/
+!data/**
+!mlruns/
+!mlruns/**
+!model/
+!model/**
+!monitoring/
+!monitoring/**
+!predictions/
+!predictions/**
+
 # Local development artifacts.
 .venv/
 __pycache__/

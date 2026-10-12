@@ -85,6 +85,108 @@ Start the API after a champion model and online feature store have been created:
 
     docker compose -f docker/docker-compose.yml up -d api
 
-The API is available at http://localhost:8000. It exposes POST /predict,
+for logs
+docker logs -f predml-api
+    
+
+The API is available at http://127.0.0.1:8000/docs. It exposes POST /predict,
 POST /forecast, and GET /health (plus interactive docs at /docs). The forecast
 endpoint writes its CSV output to ./predictions/forecast on the host.
+
+
+PredML Kubernetes (Docker Desktop)
+==================================
+
+These commands are run from the PredML directory. Kubernetes uses its own
+PVCs, so the Docker Compose data and Kubernetes data are separate.
+
+Confirm Docker Desktop Kubernetes is running and select its context:
+
+    kubectl config use-context docker-desktop
+    kubectl get nodes
+
+Create the namespace, configuration, and persistent volumes:
+
+    kubectl apply -f k8s/00-namespace.yaml
+    kubectl apply -f k8s/01-configmap.yaml
+    kubectl apply -f k8s/02-pvc.yaml
+
+Start MLflow and its internal service:
+
+    kubectl apply -f k8s/10-mlflow-deployment.yaml
+    kubectl apply -f k8s/11-mlflow-service.yaml
+
+Build the seed image from the existing local runtime state. This copies the
+local data, MLflow state, model registry pointers, predictions, and monitoring
+files into a container that will seed the Kubernetes PVCs:
+
+    docker build -f docker/seed.Dockerfile -t predml-local/seed:latest .
+
+Stop the workloads before copying SQLite and model files, then run the seed Job:
+
+    kubectl scale deployment mlflow predml-api --replicas=0 -n predml
+    kubectl delete job predml-seed -n predml --ignore-not-found
+    kubectl apply -f k8s/03-seed-job.yaml
+    kubectl wait --for=condition=complete job/predml-seed -n predml --timeout=180s
+    kubectl logs job/predml-seed -n predml
+
+Start the Kubernetes API:
+
+    kubectl apply -f k8s/20-api-deployment.yaml
+    kubectl apply -f k8s/21-api-service.yaml
+    kubectl scale deployment mlflow predml-api --replicas=1 -n predml
+    kubectl get pods -n predml -w
+
+Port forwarding gives a temporary connection from a local port on the host to
+a Kubernetes Service inside the cluster. The Service remains ClusterIP and is
+not exposed directly to the host. Keep each port-forward command running in
+its own terminal; Ctrl+C stops that connection.
+
+Kubernetes MLflow (use a separate terminal):
+
+    kubectl port-forward -n predml service/mlflow 5001:5000
+
+Kubernetes API (use another terminal):
+
+    kubectl port-forward -n predml service/predml-api 8001:8000
+
+Kubernetes URLs:
+
+    MLflow UI:  http://127.0.0.1:5001
+    API docs:   http://127.0.0.1:8001/docs
+
+Docker URLs remain separate:
+
+    MLflow UI:  http://127.0.0.1:5000
+    API docs:   http://127.0.0.1:8000/docs
+
+Check Kubernetes logs when a pod is not ready:
+
+    kubectl get pods -n predml
+    kubectl get events -n predml --sort-by=.lastTimestamp
+    kubectl logs deployment/predml-api -n predml
+    kubectl logs deployment/mlflow -n predml
+
+Reset Cluster in Docker Desktop deletes Kubernetes workloads and PVC data.
+Use Restart Kubernetes first when the kubectl TLS connection times out.
+
+cd E:\Projects\mlops-genai-project\PredML
+
+docker compose -f docker\docker-compose.yml down
+
+docker compose -f docker\docker-compose.yml build mlflow api
+
+docker compose -f docker\docker-compose.yml up -d mlflow api
+
+docker compose -f docker\docker-compose.yml ps
+
+Invoke-RestMethod http://127.0.0.1:5000/health
+Invoke-RestMethod http://127.0.0.1:8000/health
+
+Open:
+
+MLflow: http://127.0.0.1:5000
+API docs: http://127.0.0.1:8000/docs
+
+docker compose -f docker\docker-compose.yml logs --tail=200 mlflow
+docker compose -f docker\docker-compose.yml logs --tail=200 api

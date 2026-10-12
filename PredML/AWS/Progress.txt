@@ -1,0 +1,343 @@
+Great plan. Let me create a complete step-by-step tracker you can save and come back to tomorrow.
+
+🗂️ PredML — Complete Setup Plan & Progress Tracker
+Save this entire section to a text file or Notion/Word doc
+
+Your Architecture Summary (for context when you return)
+Image 1 → predml-batch — Stages 01–06, 08–10 (STAGE env var driven)
+Image 2 → predml-api — Real-time inference on port 8000
+Code → GitHub repository
+Region → ap-southeast-2 (Sydney)
+4 SageMaker Pipelines → Training, Batch Inference, Monitoring, Rollback
+Jenkins → Local machine, pulls from GitHub, builds Docker, pushes to ECR
+Docker → Installed inside Jenkins (NOT Docker Desktop) to avoid slowing your machine
+S3 → All data, artifacts, predictions, MLflow artifacts
+PHASE 1 — Local Machine Setup
+✅ STEP 1 — Install Java (Jenkins requires Java 17+)
+Windows:
+
+Go to https://adoptium.net 
+Download Temurin 17 LTS → Windows x64 installer
+Run installer → check "Add to PATH" during install
+Verify:
+java -version
+# Should show: openjdk version "17.x.x"
+
+Run in CloudShell
+Mac:
+
+brew install openjdk@17
+echo 'export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+java -version
+
+Run in CloudShell
+✅ STEP 2 — Install Jenkins Locally
+Windows:
+
+Go to https://www.jenkins.io/download/ 
+Download Windows installer (.msi)
+Run installer → default port is 8080
+Jenkins starts as a Windows service automatically
+Open browser → http://localhost:8080 
+Get initial admin password:
+# Windows — run in PowerShell
+type "C:\ProgramData\Jenkins\.jenkins\secrets\initialAdminPassword"
+
+Run in CloudShell
+Mac:
+
+brew install jenkins-lts
+brew services start jenkins-lts
+# Open http://localhost:8080
+# Get password:
+cat ~/.jenkins/secrets/initialAdminPassword
+
+Run in CloudShell
+Paste password into browser → click Install suggested plugins → create admin user
+✅ STEP 3 — Install AWS CLI
+Windows:
+
+Download from https://awscli.amazonaws.com/AWSCLIV2.msi 
+Run installer
+Verify:
+aws --version
+# Should show: aws-cli/2.x.x
+
+Run in CloudShell
+Mac:
+
+brew install awscli
+aws --version
+
+Run in CloudShell
+Configure AWS credentials:
+
+aws configure
+# AWS Access Key ID:     → paste your key
+# AWS Secret Access Key: → paste your secret
+# Default region:        ap-southeast-2
+# Default output format: json
+
+Run in CloudShell
+Get your access key from IAM Console → Users → Security credentials 
+
+✅ STEP 4 — Install Docker Inside Jenkins (NOT Docker Desktop)
+This is the key step to avoid slowing your machine. You will install a lightweight Docker Engine that only Jenkins uses — completely separate from Docker Desktop.
+
+Windows — Install Docker Engine via WSL2 (recommended):
+
+Enable WSL2 if not already:
+# Run PowerShell as Administrator
+wsl --install
+wsl --set-default-version 2
+# Restart your machine
+
+Install Ubuntu from Microsoft Store
+Open Ubuntu terminal:
+# Install Docker Engine inside WSL2 (not Docker Desktop)
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+    sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) \
+    signed-by=/etc/apt/keyrings/docker.gpg] \
+    https://download.docker.com/linux/ubuntu \
+    $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+    sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+sudo service docker start
+sudo usermod -aG docker $USER
+
+Run in CloudShell
+Mac — Install Docker Engine via Colima (lightweight, no Docker Desktop):
+
+# Stop Docker Desktop first if running
+# Install Colima — lightweight Docker runtime
+brew install colima docker
+
+# Start Colima (uses much less memory than Docker Desktop)
+colima start --cpu 2 --memory 4
+
+# Verify
+docker ps
+
+Run in CloudShell
+Why Colima on Mac? Docker Desktop uses 4–8GB RAM. Colima uses ~500MB. Your machine stays fast.
+
+✅ STEP 5 — Connect Jenkins to Docker
+Windows (WSL2):
+
+Open Jenkins → Manage Jenkins → Plugins → Available
+Search and install: Docker Pipeline, Docker plugin
+Go to Manage Jenkins → Tools → Docker installations
+Add Docker → Name: docker-wsl → Install automatically: No
+Set path: /usr/bin/docker
+Mac (Colima):
+
+# Make Docker socket accessible to Jenkins
+sudo ln -sf ~/.colima/default/docker.sock /var/run/docker.sock
+sudo chmod 666 /var/run/docker.sock
+
+Run in CloudShell
+Then in Jenkins → Manage Jenkins → Tools → same steps as above.
+
+PHASE 2 — AWS Setup
+✅ STEP 6 — Create ECR Repositories
+Open ECR Console 
+Create repository → Name: predml-batch → Private → Click Create
+Repeat → Name: predml-api → Private → Click Create
+✅ STEP 7 — Create S3 Bucket and Folder Structure
+Open S3 Console  → Create bucket
+Name: predml-data-ap-southeast-2 → Region: ap-southeast-2
+Block all public access → Create bucket
+Create these folders inside the bucket (click Create folder):
+input/
+processed/
+features/
+models/
+output/
+monitoring/
+mlflow-artifacts/
+
+✅ STEP 8 — Create SageMaker IAM Execution Role
+Open IAM Console 
+Trusted entity: AWS service → SageMaker
+Attach these policies:
+AmazonSageMakerFullAccess
+AmazonS3FullAccess
+AmazonEC2ContainerRegistryFullAccess
+Name: PredML-SageMaker-ExecutionRole → Create role
+Copy the Role ARN — you will need it in pipeline code
+✅ STEP 9 — Set Up SageMaker MLflow Tracking Server
+Open SageMaker Console → MLflow 
+Click Create tracking server
+Name: predml-mlflow-tracker
+Artifact store: s3://predml-data-ap-southeast-2/mlflow-artifacts/
+Size: Small
+Click Create → wait ~5 minutes
+Copy the Tracking Server URI — needed in your code
+⚠️ Stop this server when not experimenting to save credits
+
+✅ STEP 10 — Create SageMaker Feature Group
+Open SageMaker Feature Store 
+Click Create feature group
+Name: predml-feature-group
+Enable Offline store → S3 URI: s3://predml-data-ap-southeast-2/features/
+Define your feature columns (name + type matching your 03_feature_store.py)
+Click Create
+PHASE 3 — Jenkins + GitHub Integration
+✅ STEP 11 — Connect Jenkins to GitHub
+In Jenkins → Manage Jenkins → Plugins → install GitHub plugin, Git plugin
+Go to your GitHub repo → Settings → Webhooks → Add webhook
+Payload URL: http://<your-local-ip>:8080/github-webhook/
+Content type: application/json
+Trigger: Just the push event
+⚠️ For GitHub to reach your local Jenkins, use ngrok as a tunnel:
+
+# Install ngrok — https://ngrok.com/download
+ngrok http 8080
+# Copy the https URL → use as webhook payload URL in GitHub
+
+Run in CloudShell
+✅ STEP 12 — Add AWS Credentials to Jenkins
+Jenkins → Manage Jenkins → Credentials → Global → Add Credentials
+Kind: Secret text
+Add these one by one:
+ID: AWS_ACCESS_KEY_ID → your access key
+ID: AWS_SECRET_ACCESS_KEY → your secret key
+In Jenkinsfile reference them:
+environment {
+    AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+}
+
+✅ STEP 13 — Create Jenkins Pipelines
+Create 3 Jenkins pipeline jobs:
+
+Job 1 — predml-training-pipeline
+
+Source: GitHub repo
+Jenkinsfile path: jenkins/Jenkinsfile.training
+Trigger: GitHub webhook + weekly cron 0 0 * * 0
+Job 2 — predml-batch-inference (optional — mainly EventBridge triggered)
+
+Source: GitHub repo
+Jenkinsfile path: jenkins/Jenkinsfile.batch
+Trigger: Manual or EventBridge
+Job 3 — predml-api-deploy
+
+Source: GitHub repo
+Jenkinsfile path: jenkins/Jenkinsfile.api
+Trigger: GitHub webhook (on merge to main)
+PHASE 4 — SageMaker Pipelines Setup
+✅ STEP 14 — Create 4 SageMaker Pipelines
+Run these Python scripts once to register pipelines in SageMaker:
+
+python sagemaker_pipelines/training_pipeline.py
+python sagemaker_pipelines/batch_inference_pipeline.py
+python sagemaker_pipelines/monitoring_pipeline.py
+python sagemaker_pipelines/rollback_pipeline.py
+
+Run in CloudShell
+Verify at SageMaker Pipelines Console 
+
+✅ STEP 15 — Set Up EventBridge Schedules
+Open EventBridge Scheduler 
+Schedule 1 — Batch Inference (daily 2 AM):
+
+Name: predml-batch-inference-schedule
+Cron: 0 2 * * ? *
+Target: SageMaker Pipeline → PredML-Batch-Inference-Pipeline
+Schedule 2 — Monitoring (daily 4 AM):
+
+Name: predml-monitoring-schedule
+Cron: 0 4 * * ? *
+Target: SageMaker Pipeline → PredML-Monitoring-Pipeline
+PHASE 5 — Update Your Python Code
+✅ STEP 16 — Update config.py for S3 + SageMaker
+# src/config.py
+import os
+
+# ── S3 Configuration ──────────────────────────────────────────────
+S3_BUCKET        = os.environ.get("S3_BUCKET", "predml-data-ap-southeast-2")
+S3_INPUT         = os.environ.get("S3_INPUT",   "input/raw_data.csv")
+S3_BATCH_INPUT   = os.environ.get("S3_BATCH_INPUT", "input/batch_input.csv")
+S3_PROCESSED     = os.environ.get("S3_PROCESSED",   "processed/")
+S3_FEATURES      = os.environ.get("S3_FEATURES",    "features/")
+S3_MODELS        = os.environ.get("S3_MODELS",      "models/")
+S3_OUTPUT        = os.environ.get("S3_OUTPUT",      "output/")
+S3_MONITORING    = os.environ.get("S3_MONITORING",  "monitoring/")
+
+# ── MLflow Configuration ──────────────────────────────────────────
+MLFLOW_TRACKING_URI  = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
+MLFLOW_EXPERIMENT    = os.environ.get("MLFLOW_EXPERIMENT",   "predml-experiment")
+
+# ── SageMaker Configuration ───────────────────────────────────────
+SAGEMAKER_ROLE       = os.environ.get("SAGEMAKER_ROLE", "")
+FEATURE_GROUP_NAME   = os.environ.get("FEATURE_GROUP_NAME", "predml-feature-group")
+AWS_REGION           = os.environ.get("AWS_DEFAULT_REGION", "ap-southeast-2")
+
+# ── SageMaker Processing I/O paths ───────────────────────────────
+SM_INPUT_PATH        = "/opt/ml/processing/input"
+SM_OUTPUT_PATH       = "/opt/ml/processing/output"
+
+════════════════════════════════════════════════════════
+  PredML — Complete Setup Progress Tracker
+  Region: ap-southeast-2 | Account: AWS (new)
+════════════════════════════════════════════════════════
+
+PHASE 1 — Local Machine Setup
+  [ ] STEP 1  — Install Java 17
+  [ ] STEP 2  — Install Jenkins (port 8080)
+  [ ] STEP 3  — Install AWS CLI + configure credentials
+  [ ] STEP 4  — Install Docker Engine (WSL2/Colima) — NOT Docker Desktop
+  [ ] STEP 5  — Connect Jenkins to Docker Engine
+
+PHASE 2 — Terraform Infrastructure Setup  ← NEW
+  [ ] STEP 6  — Install Terraform on local machine
+  [ ] STEP 7  — Create S3 bucket for Terraform remote state
+                (predml-terraform-state-ap-southeast-2)
+  [ ] STEP 8  — Create GitHub repo: predml-infra
+  [ ] STEP 9  — Push Terraform module structure to predml-infra
+  [ ] STEP 10 — Create Jenkins job: predml-terraform-pipeline
+  [ ] STEP 11 — Run Terraform plan → review → apply
+                This creates:
+                  ✓ S3 data bucket + folders
+                  ✓ ECR repos (predml-batch, predml-api)
+                  ✓ IAM roles (SageMaker + EventBridge)
+                  ✓ SageMaker MLflow Tracking Server
+                  ✓ SageMaker Feature Group
+                  ✓ EventBridge schedules
+
+PHASE 3 — Jenkins + GitHub Integration (ML Pipeline)
+  [ ] STEP 12 — Connect Jenkins to GitHub (webhook + ngrok)
+  [ ] STEP 13 — Add AWS credentials to Jenkins
+  [ ] STEP 14 — Create Jenkins job: predml-training-pipeline
+  [ ] STEP 15 — Create Jenkins job: predml-api-deploy
+
+PHASE 4 — SageMaker Pipelines Setup
+  [ ] STEP 16 — Create 4 SageMaker pipelines (run Python scripts)
+                  ✓ PredML-Training-Pipeline (stages 01-05)
+                  ✓ PredML-Batch-Inference-Pipeline (stage 06)
+                  ✓ PredML-Monitoring-Pipeline (stage 08)
+                  ✓ PredML-Rollback-Pipeline (stage 10)
+
+PHASE 5 — Code Updates
+  [ ] STEP 17 — Update config.py for S3 + SageMaker paths
+  [ ] STEP 18 — Update each stage script to use config.py
+  [ ] STEP 19 — Test each stage locally with Docker
+  [ ] STEP 20 — Push updated code to GitHub
+  [ ] STEP 21 — Trigger first full training pipeline run
+  [ ] STEP 22 — Verify batch predictions appear in S3 output/
+  [ ] STEP 23 — Deploy predml-api as SageMaker endpoint
+  [ ] STEP 24 — Verify real-time endpoint responds on /ping
+
+════════════════════════════════════════════════════════
+  WHEN YOU RETURN — paste this to Amazon Q:
+  "I am working on PredML MLOps setup on AWS (new) in
+   ap-southeast-2. Here is my progress: [paste checklist]
+   I am stuck on STEP X — [describe issue]"
+════════════════════════════════════════════════════════

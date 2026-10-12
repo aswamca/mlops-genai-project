@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 RUN python -m pip install --upgrade pip \
-    && python -m pip install "mlflow>=2.9"
+    && python -m pip install "mlflow==2.22.2"
 
 WORKDIR /app/PredML
 RUN mkdir -p /app/PredML/mlruns

@@ -1,0 +1,732 @@
+Suggested Pipeline Split
+Pipeline 1 — Training Pipeline (Weekly or on Code Change)
+01_preprocess → 02_feature_engineering → 03_feature_store → 04_train_model → 05_register_model
+
+Trigger: Weekly schedule OR when Jenkins detects a code change (git push)
+
+Pipeline 2 — Batch Inference (Scheduled — Daily/Weekly)
+06_batch_inference
+
+Trigger: EventBridge schedule (e.g. every day at 2 AM)
+
+Pipeline 3 — Model Monitoring (Scheduled — Daily)
+08_model_monitoring
+
+Trigger: EventBridge schedule (e.g. every day after batch inference)
+
+On-Demand Jobs (Manual trigger only)
+09_forecast   → triggered manually or after specific events
+10_rollback   → triggered manually when monitoring detects issues
+
+Implementation
+1. Training Pipeline (Jenkins triggered — weekly or on git push)
+// Jenkinsfile — Training Pipeline
+// Triggers: weekly cron OR git push to main branch
+pipeline {
+    agent any
+
+    triggers {
+        // Run every Sunday at midnight
+        cron('0 0 * * 0')
+        // Also triggers on git push automatically via webhook
+    }
+
+    environment {
+        AWS_REGION     = 'ap-southeast-2'
+        AWS_ACCOUNT_ID = '<your-account-id>'
+    }
+
+    stages {
+        stage('Build & Push predml-batch') {
+            // Only rebuild image if code changed
+            when { changeset "src/**" }
+            steps {
+                sh '''
+                    aws ecr get-login-password --region $AWS_REGION | \
+                    docker login --username AWS --password-stdin \
+                    $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+
+                    docker build -t predml-batch:latest -f docker/Dockerfile.batch .
+                    docker push \
+                    $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/predml-batch:latest
+                '''
+            }
+        }
+
+        stage('Trigger Training Pipeline') {
+            steps {
+                sh '''
+                    aws sagemaker start-pipeline-execution \
+                        --pipeline-name PredML-Training-Pipeline \
+                        --region $AWS_REGION
+                '''
+            }
+        }
+    }
+}
+
+2. SageMaker Pipeline Definitions
+Training Pipeline (Stages 01–05)
+# training_pipeline.py
+from sagemaker.workflow.pipeline import Pipeline
+from sagemaker.workflow.steps import ProcessingStep
+from sagemaker.processing import ScriptProcessor, ProcessingInput, ProcessingOutput
+
+def make_processor(stage: str):
+    return ScriptProcessor(
+        image_uri=ECR_BATCH_IMAGE,
+        role=ROLE,
+        instance_type="ml.m5.xlarge",
+        instance_count=1,
+        env={
+            "STAGE":               stage,
+            "S3_BUCKET":           S3_BUCKET,
+            "MLFLOW_TRACKING_URI": MLFLOW_URI,
+            "AWS_DEFAULT_REGION":  REGION
+        }
+    )
+
+# Define steps
+step_preprocess    = ProcessingStep(name="Preprocess",
+                        processor=make_processor("01_preprocess"), ...)
+step_feature_eng   = ProcessingStep(name="FeatureEngineering",
+                        processor=make_processor("02_feature_engineering"), ...)
+step_feature_store = ProcessingStep(name="FeatureStore",
+                        processor=make_processor("03_feature_store"), ...)
+step_train         = ProcessingStep(name="TrainModel",
+                        processor=make_processor("04_train_model"), ...)
+step_register      = ProcessingStep(name="RegisterModel",
+                        processor=make_processor("05_register_model"), ...)
+
+# Training pipeline — stages 01 to 05 only
+training_pipeline = Pipeline(
+    name="PredML-Training-Pipeline",
+    steps=[
+        step_preprocess,
+        step_feature_eng,
+        step_feature_store,
+        step_train,
+        step_register
+    ]
+)
+training_pipeline.upsert(role_arn=ROLE)
+
+Batch Inference Pipeline (Stage 06 only)
+# batch_inference_pipeline.py
+step_batch_inference = ProcessingStep(
+    name="BatchInference",
+    processor=make_processor("06_batch_inference"),
+    inputs=[ProcessingInput(
+        source=f"{S3_BUCKET}/input/batch_input.csv",
+        destination="/opt/ml/processing/input"
+    )],
+    outputs=[ProcessingOutput(
+        source="/opt/ml/processing/output",
+        destination=f"{S3_BUCKET}/output/"
+    )]
+)
+
+batch_pipeline = Pipeline(
+    name="PredML-Batch-Inference-Pipeline",
+    steps=[step_batch_inference]
+)
+batch_pipeline.upsert(role_arn=ROLE)
+
+Monitoring Pipeline (Stage 08 only)
+# monitoring_pipeline.py
+step_monitoring = ProcessingStep(
+    name="ModelMonitoring",
+    processor=make_processor("08_model_monitoring"),
+    inputs=[
+        ProcessingInput(
+            source=f"{S3_BUCKET}/output/batch_predictions.csv",
+            destination="/opt/ml/processing/input/predictions"
+        ),
+        ProcessingInput(
+            source=f"{S3_BUCKET}/input/raw_data.csv",
+            destination="/opt/ml/processing/input/baseline"
+        )
+    ],
+    outputs=[ProcessingOutput(
+        source="/opt/ml/processing/output",
+        destination=f"{S3_BUCKET}/monitoring/"
+    )]
+)
+
+monitoring_pipeline = Pipeline(
+    name="PredML-Monitoring-Pipeline",
+    steps=[step_monitoring]
+)
+monitoring_pipeline.upsert(role_arn=ROLE)
+
+3. EventBridge Schedules for Batch & Monitoring
+Use Amazon EventBridge to trigger SageMaker pipelines on a schedule — no Jenkins needed for these.
+
+Step-by-step in Console:
+Open EventBridge Console  → Schedules → Create schedule
+
+For Batch Inference (runs daily at 2 AM):
+
+Schedule name: predml-batch-inference-schedule
+Schedule pattern: Recurring schedule → Cron: 0 2 * * ? *
+Target: SageMaker Pipeline → select PredML-Batch-Inference-Pipeline
+IAM role: create new (EventBridge needs permission to start pipeline)
+For Monitoring (runs daily at 4 AM — after batch completes):
+
+Schedule name: predml-monitoring-schedule
+Schedule pattern: Cron: 0 4 * * ? *
+Target: SageMaker Pipeline → select PredML-Monitoring-Pipeline
+4. Auto-trigger Rollback from Monitoring
+If 08_model_monitoring.py detects drift, it can automatically trigger the rollback job:
+
+# Inside 08_model_monitoring.py — trigger rollback if drift detected
+import boto3
+
+def trigger_rollback_if_needed(drift_score: float, threshold: float = 0.15):
+    if drift_score > threshold:
+        print(f"Drift detected ({drift_score:.3f}) — triggering rollback pipeline")
+        sm_client = boto3.client("sagemaker", region_name="ap-southeast-2")
+        sm_client.start_pipeline_execution(
+            PipelineName="PredML-Rollback-Pipeline"
+        )
+
+Complete Scheduling Overview
+Every Sunday midnight (Jenkins cron / git push)
+    └── PredML-Training-Pipeline
+            01_preprocess
+            02_feature_engineering
+            03_feature_store
+            04_train_model  ──→ MLflow tracking
+            05_register_model
+
+Every day at 2:00 AM (EventBridge)
+    └── PredML-Batch-Inference-Pipeline
+            06_batch_inference ──→ batch_predictions.csv → S3
+
+Every day at 4:00 AM (EventBridge)
+    └── PredML-Monitoring-Pipeline
+            08_model_monitoring
+                └── if drift > threshold
+                        └── trigger PredML-Rollback-Pipeline (10_rollback)
+
+Manual / On-demand
+    └── 09_forecast   (run anytime via console or Jenkins)
+    └── 10_rollback   (auto from monitoring OR manual)
+
+Summary of Your 4 SageMaker Pipelines
+Pipeline	Stages	Trigger
+PredML-Training-Pipeline	01 → 02 → 03 → 04 → 05	Weekly cron + git push
+PredML-Batch-Inference-Pipeline	06	Daily 2 AM (EventBridge)
+PredML-Monitoring-Pipeline	08	Daily 4 AM (EventBridge)
+PredML-Rollback-Pipeline	10	Auto from monitoring or manual
+And 09_forecast runs as a standalone on-demand job.
+
+Would you like help setting up the EventBridge schedules in the console, or would you like to start updating your config.py to support all S3 paths and environment variables needed across all these pipelines?
+
+Terraform
+
+Your Recommended Terraform Module Structure
+predml-infra/                          ← in my mlops-genai-project repo GitHub repo
+├── main.tf                            ← calls all modules
+├── variables.tf                       ← global variables
+├── outputs.tf                         ← outputs from all modules
+├── terraform.tfvars                   ← your actual values (gitignored)
+├── terraform.tfvars.example           ← template to commit to git
+├── backend.tf                         ← S3 remote state config
+│
+└── modules/ seprate repo for terrafom modules
+    ├── s3/
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    ├── ecr/
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    ├── iam/
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    ├── sagemaker/
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    └── eventbridge/
+        ├── main.tf
+        ├── variables.tf
+        └── outputs.tf
+
+Terraform Files
+backend.tf — Remote State in S3
+terraform {
+  backend "s3" {
+    bucket  = "predml-terraform-state-ap-southeast-2"
+    key     = "predml/terraform.tfstate"
+    region  = "ap-southeast-2"
+    encrypt = true
+  }
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+variables.tf — Global Variables
+variable "aws_region" {
+  default = "ap-southeast-2"
+}
+
+variable "project_name" {
+  default = "predml"
+}
+
+variable "s3_bucket_name" {
+  description = "Main data bucket name"
+}
+
+variable "ecr_batch_repo" {
+  default = "predml-batch"
+}
+
+variable "ecr_api_repo" {
+  default = "predml-api"
+}
+
+variable "sagemaker_role_name" {
+  default = "PredML-SageMaker-ExecutionRole"
+}
+
+variable "mlflow_server_name" {
+  default = "predml-mlflow-tracker"
+}
+
+variable "feature_group_name" {
+  default = "predml-feature-group"
+}
+
+terraform.tfvars.example — Commit This to Git
+aws_region     = "ap-southeast-2"
+project_name   = "predml"
+s3_bucket_name = "predml-data-ap-southeast-2"
+
+main.tf — Calls All Modules
+module "s3" {
+  source      = "./modules/s3"
+  bucket_name = var.s3_bucket_name
+  project     = var.project_name
+}
+
+module "ecr" {
+  source         = "./modules/ecr"
+  batch_repo     = var.ecr_batch_repo
+  api_repo       = var.ecr_api_repo
+  project        = var.project_name
+}
+
+module "iam" {
+  source      = "./modules/iam"
+  role_name   = var.sagemaker_role_name
+  s3_bucket   = module.s3.bucket_arn
+  project     = var.project_name
+}
+
+module "sagemaker" {
+  source             = "./modules/sagemaker"
+  execution_role_arn = module.iam.sagemaker_role_arn
+  s3_bucket          = var.s3_bucket_name
+  mlflow_server_name = var.mlflow_server_name
+  feature_group_name = var.feature_group_name
+  project            = var.project_name
+}
+
+module "eventbridge" {
+  source             = "./modules/eventbridge"
+  sagemaker_role_arn = module.iam.sagemaker_role_arn
+  project            = var.project_name
+  aws_region         = var.aws_region
+  aws_account_id     = data.aws_caller_identity.current.account_id
+}
+
+data "aws_caller_identity" "current" {}
+
+outputs.tf
+output "s3_bucket_name" {
+  value = module.s3.bucket_name
+}
+
+output "ecr_batch_uri" {
+  value = module.ecr.batch_repo_uri
+}
+
+output "ecr_api_uri" {
+  value = module.ecr.api_repo_uri
+}
+
+output "sagemaker_role_arn" {
+  value = module.iam.sagemaker_role_arn
+}
+
+output "mlflow_tracking_uri" {
+  value = module.sagemaker.mlflow_tracking_uri
+}
+
+Module Files
+modules/s3/main.tf
+resource "aws_s3_bucket" "predml_data" {
+  bucket = var.bucket_name
+
+  tags = {
+    Project = var.project
+  }
+}
+
+resource "aws_s3_bucket_versioning" "predml_data" {
+  bucket = aws_s3_bucket.predml_data.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# Create all required folders as empty objects
+locals {
+  folders = [
+    "input/",
+    "processed/",
+    "features/",
+    "models/",
+    "output/",
+    "monitoring/",
+    "mlflow-artifacts/"
+  ]
+}
+
+resource "aws_s3_object" "folders" {
+  for_each = toset(local.folders)
+  bucket   = aws_s3_bucket.predml_data.id
+  key      = each.value
+  content  = ""
+}
+
+modules/s3/variables.tf
+variable "bucket_name" {}
+variable "project"     {}
+
+modules/s3/outputs.tf
+output "bucket_name" {
+  value = aws_s3_bucket.predml_data.bucket
+}
+output "bucket_arn" {
+  value = aws_s3_bucket.predml_data.arn
+}
+
+modules/ecr/main.tf
+resource "aws_ecr_repository" "predml_batch" {
+  name                 = var.batch_repo
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = { Project = var.project }
+}
+
+resource "aws_ecr_repository" "predml_api" {
+  name                 = var.api_repo
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = { Project = var.project }
+}
+
+modules/ecr/variables.tf
+variable "batch_repo" {}
+variable "api_repo"   {}
+variable "project"    {}
+
+modules/ecr/outputs.tf
+output "batch_repo_uri" {
+  value = aws_ecr_repository.predml_batch.repository_url
+}
+output "api_repo_uri" {
+  value = aws_ecr_repository.predml_api.repository_url
+}
+
+modules/iam/main.tf
+resource "aws_iam_role" "sagemaker_execution" {
+  name = var.role_name
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "sagemaker.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = { Project = var.project }
+}
+
+resource "aws_iam_role_policy_attachment" "sagemaker_full" {
+  role       = aws_iam_role.sagemaker_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "s3_full" {
+  role       = aws_iam_role.sagemaker_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "ecr_full" {
+  role       = aws_iam_role.sagemaker_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+}
+
+# IAM role for EventBridge to trigger SageMaker pipelines
+resource "aws_iam_role" "eventbridge_sagemaker" {
+  name = "${var.project}-eventbridge-sagemaker-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "eventbridge_sagemaker_policy" {
+  role = aws_iam_role.eventbridge_sagemaker.name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "sagemaker:StartPipelineExecution"
+      Resource = "*"
+    }]
+  })
+}
+
+modules/iam/outputs.tf
+output "sagemaker_role_arn" {
+  value = aws_iam_role.sagemaker_execution.arn
+}
+output "eventbridge_role_arn" {
+  value = aws_iam_role.eventbridge_sagemaker.arn
+}
+
+modules/sagemaker/main.tf
+resource "aws_sagemaker_mlflow_tracking_server" "predml" {
+  tracking_server_name = var.mlflow_server_name
+  artifact_store_uri   = "s3://${var.s3_bucket}/mlflow-artifacts/"
+  role_arn             = var.execution_role_arn
+  tracking_server_size = "Small"
+
+  tags = { Project = var.project }
+}
+
+resource "aws_sagemaker_feature_group" "predml" {
+  feature_group_name             = var.feature_group_name
+  record_identifier_feature_name = "record_id"
+  event_time_feature_name        = "event_time"
+  role_arn                       = var.execution_role_arn
+
+  # Define your features here — update to match your actual columns
+  feature_definition {
+    feature_name = "record_id"
+    feature_type = "Integral"
+  }
+
+  feature_definition {
+    feature_name = "event_time"
+    feature_type = "String"
+  }
+
+  feature_definition {
+    feature_name = "feature_1"
+    feature_type = "Fractional"
+  }
+
+  offline_store_config {
+    s3_storage_config {
+      s3_uri = "s3://${var.s3_bucket}/features/"
+    }
+  }
+
+  tags = { Project = var.project }
+}
+
+modules/sagemaker/outputs.tf
+output "mlflow_tracking_uri" {
+  value = aws_sagemaker_mlflow_tracking_server.predml.tracking_server_url
+}
+output "feature_group_name" {
+  value = aws_sagemaker_feature_group.predml.feature_group_name
+}
+
+modules/eventbridge/main.tf
+# Batch Inference — daily 2 AM
+resource "aws_scheduler_schedule" "batch_inference" {
+  name = "${var.project}-batch-inference-schedule"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression = "cron(0 2 * * ? *)"
+
+  target {
+    arn      = "arn:aws:sagemaker:${var.aws_region}:${var.aws_account_id}:pipeline/PredML-Batch-Inference-Pipeline"
+    role_arn = var.sagemaker_role_arn
+
+    sagemaker_pipeline_parameters {
+      pipeline_parameter_list = []
+    }
+  }
+}
+
+# Monitoring — daily 4 AM
+resource "aws_scheduler_schedule" "monitoring" {
+  name = "${var.project}-monitoring-schedule"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression = "cron(0 4 * * ? *)"
+
+  target {
+    arn      = "arn:aws:sagemaker:${var.aws_region}:${var.aws_account_id}:pipeline/PredML-Monitoring-Pipeline"
+    role_arn = var.sagemaker_role_arn
+
+    sagemaker_pipeline_parameters {
+      pipeline_parameter_list = []
+    }
+  }
+}
+
+Jenkins Pipeline for Terraform
+jenkins/Jenkinsfile.terraform
+pipeline {
+    agent any
+
+    environment {
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        AWS_REGION            = 'ap-southeast-2'
+        TF_VAR_s3_bucket_name = 'predml-data-ap-southeast-2'
+    }
+
+    parameters {
+        choice(
+            name: 'TF_ACTION',
+            choices: ['plan', 'apply', 'destroy'],
+            description: 'Terraform action to run'
+        )
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/<your-org>/predml-infra.git',
+                    credentialsId: 'github-credentials'
+            }
+        }
+
+        stage('Install Terraform') {
+            steps {
+                sh '''
+                    if ! command -v terraform &> /dev/null; then
+                        curl -fsSL https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_amd64.zip \
+                            -o terraform.zip
+                        unzip terraform.zip
+                        sudo mv terraform /usr/local/bin/
+                    fi
+                    terraform version
+                '''
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                sh '''
+                    terraform init \
+                        -backend-config="bucket=predml-terraform-state-ap-southeast-2" \
+                        -backend-config="key=predml/terraform.tfstate" \
+                        -backend-config="region=$AWS_REGION"
+                '''
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                sh 'terraform validate'
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                sh '''
+                    terraform plan \
+                        -var-file="terraform.tfvars" \
+                        -out=tfplan
+                '''
+            }
+        }
+
+        stage('Approval — Apply/Destroy Only') {
+            when {
+                expression { params.TF_ACTION in ['apply', 'destroy'] }
+            }
+            steps {
+                // Pauses pipeline — requires manual approval in Jenkins UI
+                input message: "Approve Terraform ${params.TF_ACTION}?",
+                      ok: "Yes, proceed"
+            }
+        }
+
+        stage('Terraform Apply') {
+            when {
+                expression { params.TF_ACTION == 'apply' }
+            }
+            steps {
+                sh 'terraform apply -auto-approve tfplan'
+            }
+        }
+
+        stage('Terraform Destroy') {
+            when {
+                expression { params.TF_ACTION == 'destroy' }
+            }
+            steps {
+                sh '''
+                    terraform destroy \
+                        -var-file="terraform.tfvars" \
+                        -auto-approve
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Terraform ${params.TF_ACTION} completed successfully"
+        }
+        failure {
+            echo "Terraform ${params.TF_ACTION} failed — check logs"
+        }
+    }
+}
