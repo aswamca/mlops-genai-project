@@ -1,0 +1,75 @@
+pipeline {
+    agent any
+
+    triggers {
+        // Run every Sunday at midnight.
+        cron('0 0 * * 0')
+        // Git push triggering is configured through the Jenkins webhook.
+    }
+
+    environment {
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        AWS_ACCOUNT_ID        = credentials('AWS_ACCOUNT_ID')
+        AWS_REGION            = 'ap-southeast-2'
+        ECR_REPOSITORY        = 'predml-batch'
+        TRAINING_PIPELINE     = 'PredML-Training-Pipeline'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build & Push predml-batch') {
+            // Rebuild the image only when the batch source changes.
+            when {
+                changeset 'PredML/src/**'
+            }
+            steps {
+                dir('PredML') {
+                    sh '''
+                        set -eu
+
+                        ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+                        aws ecr get-login-password --region "${AWS_REGION}" | \
+                            docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+
+                        docker build \
+                            -t "${ECR_REPOSITORY}:latest" \
+                            -f docker/batch.Dockerfile .
+                        docker tag \
+                            "${ECR_REPOSITORY}:latest" \
+                            "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+                        docker push \
+                            "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+                    '''
+                }
+            }
+        }
+
+        stage('Trigger Training Pipeline') {
+            steps {
+                sh '''
+                    set -eu
+
+                    aws sagemaker start-pipeline-execution \
+                        --pipeline-name "${TRAINING_PIPELINE}" \
+                        --region "${AWS_REGION}"
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'PredML training pipeline triggered successfully'
+        }
+        failure {
+            echo 'PredML batch image build or training pipeline trigger failed - check logs'
+        }
+    }
+}

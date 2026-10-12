@@ -1,17 +1,36 @@
 __pycache__/
 *.py[cod]
+# Python virtual environments, including nested and versioned environments.
 .venv/
-.venvpython312/
+.venv*/
+**/.venv/
+**/.venv*/
+venv/
+env/
+ENV/
 
 # Local secrets and environment files
 .env
 .env.*
 !.env.example
+*.secret
+*.secrets
+*.key
+*.pem
+*.p12
+*.pfx
+.aws/
+**/.aws/
 
 # Local models and generated ML/vector artifacts
 artifacts/
 ollama-models/
 models/
+PredML/data/
+PredML/model/
+PredML/predictions/
+PredML/monitoring/
+PredML/mlruns/
 *.joblib
 *.pkl
 *.pickle
@@ -24,8 +43,15 @@ chroma/
 *.tfstate.*
 crash.log
 crash.*.log
+terraform.tfvars
+terraform.tfvars.json
+*.tfplan
+*.tfplan.json
 
 # Local tooling files
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+.coverage.*
+htmlcov/

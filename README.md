@@ -1,316 +1,214 @@
-mlops-genai-project
-A comprehensive MLOps and Generative AI implementation project. The project brings together LLM orchestration, retrieval-augmented generation, model lifecycle automation, monitoring, and cloud infrastructure into one practical reference implementation.
-MLOps GenAI Project
-A comprehensive MLOps and Generative AI implementation project. The project brings together LLM orchestration, retrieval-augmented generation, model lifecycle automation, monitoring, and cloud infrastructure into one practical reference implementation.
+# PredML
 
-The planned implementation covers:
+PredML is a predictive machine-learning operations project for preparing data,
+training and registering models, serving predictions, and monitoring model
+behavior. It supports local development with Python and Docker and provides AWS
+deployment infrastructure through SageMaker, S3, ECR, MLflow, Feature Store,
+EventBridge, Terraform, and Jenkins.
 
-LangChain and LangGraph for LLM orchestration and workflow control
-RAG using FAISS for local development and OpenSearch for a managed search backend
-AWS Bedrock integration, including model access and guardrails
-SageMaker MLOps pipelines for training, evaluation, and deployment
-Data drift detection and model monitoring
-Terraform infrastructure as code for AWS resources
-Docker and Kubernetes deployment workflows
-Project status: The local Ollama examples are implemented. Tests, container manifests, Kubernetes configuration, and Terraform infrastructure remain planned scaffold work.
+## What this project does
 
-Table of Contents
-Project Overview
-Quick Start
-Project Structure
-File Descriptions
-AWS vs Local
-Prerequisites
-Running Each Script
-Infrastructure Deployment
-Testing
-Development Roadmap
-Implementation Guide
-How the Local Project Flow Works
-In simple terms, Ollama is the local server that runs the downloaded AI model. Our Python code does not run the model directly. It sends a request to Ollama, and Ollama passes that request to the selected model, such as llama3.2:1b.
+The main PredML workflow is:
 
-You ask a question
-	|
-	v
-Python application
-	|
-	v
-LangChain or LangGraph
-	|
-	v
-Ollama server at http://localhost:11434
-	|
-	v
-llama3.2:1b generates the answer
-	|
-	v
-Answer returns to the Python application
-The roles are:
+```text
+Raw data
+  -> preprocessing
+  -> feature engineering and Feature Store
+  -> model training
+  -> model registration
+  -> batch or real-time inference
+  -> monitoring, forecasting, and rollback
+```
 
-Python application: Contains our project logic and sends questions.
-LangChain/LangGraph: Connects the Python code to the model and manages the workflow.
-Ollama server: Runs locally and receives model requests.
-llama3.2:1b: The lightweight chat model that generates answers.
-nomic-embed-text: Converts documents and questions into vectors for RAG search.
-FAISS: Searches those vectors locally to find relevant document content before the chat model answers.
-For a normal chat request:
+The batch container uses the `STAGE` environment variable to run the required
+pipeline stage:
 
-Python -> LangChain -> Ollama server -> llama3.2:1b -> response
-For a RAG request:
+- `01_preprocess`
+- `02_feature_engineering`
+- `03_feature_store`
+- `04_train_model`
+- `05_register_model`
+- `06_batch_inference`
+- `08_model_monitoring`
+- `09_forecast`
+- `10_rollback`
 
-Documents -> nomic-embed-text -> FAISS
-Question -> nomic-embed-text -> FAISS finds relevant documents
-Question plus relevant documents -> Ollama -> llama3.2:1b -> response
-Ollama, the chat model, and the embedding model run locally. The application only needs the Ollama server available at http://localhost:11434.
+The real-time API is implemented separately in `src/07_realtime_inference.py`.
 
-Project Overview
-The project is organized around two complementary paths:
+## Repository structure
 
-Local experimentation: Run orchestration, RAG, drift detection, model training, and API examples locally while developing and testing.
-AWS deployment: Move production-oriented workloads to Bedrock, OpenSearch, SageMaker, and infrastructure provisioned with Terraform.
-The expected end-to-end flow is:
+```text
+PredML/
+|-- src/                         Python pipeline and inference code
+|-- docker/                      Dockerfiles and container dependencies
+|-- k8s/                         Kubernetes deployments and jobs
+|-- AWS/                         AWS setup documentation and Terraform
+|   `-- terraform/
+|       |-- main.tf              Root Terraform module
+|       |-- backend.tf            S3 remote-state configuration
+|       |-- variables.tf         Terraform inputs
+|       |-- outputs.tf            Terraform outputs
+|       `-- modules/              Reusable AWS modules
+|           |-- s3/
+|           |-- ecr/
+|           |-- iam/
+|           |-- sagemaker/
+|           `-- eventbridge/
+|-- data/                        Local data files and generated datasets
+|-- model/                       Local model artifacts
+|-- predictions/                 Local prediction output
+|-- monitoring/                  Local monitoring output
+`-- mlruns/                      Local MLflow tracking data
 
-Data -> preprocessing and training -> evaluation -> model/API deployment
-										 |
-										 v
-							  monitoring and drift detection
+cicd/
+|-- Jenkinsfile-batch            Build/push batch image and trigger training
+`-- Jenkinsfile.terraform        Validate, plan, apply, or destroy Terraform
+```
 
-User question -> LangChain/LangGraph workflow -> FAISS or OpenSearch retrieval
-										 |
-										 v
-							  Bedrock model and guardrails
-Quick Start
-Create and activate a virtual environment from the repository root:
+## Prerequisites
 
+- Python 3.11 or newer
+- Docker, when running containers
+- AWS CLI, when using AWS resources
+- Terraform, when deploying infrastructure
+- Jenkins, when using the CI/CD pipelines
+
+AWS deployment requires permissions for the services used by the Terraform
+modules. Configure AWS credentials through your local AWS profile or Jenkins
+credentials; never store access keys in this repository.
+
+## Local setup
+
+Create a virtual environment from the repository root:
+
+```powershell
 python -m venv .venv
-Windows PowerShell:
+```
 
-.\.venv\Scripts\Activate.ps1
-If PowerShell reports that running scripts is disabled, allow scripts only for the current PowerShell session and activate the environment again:
+Activate it in Windows PowerShell:
 
+```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 . .\.venv\Scripts\Activate.ps1
-The Process scope is temporary and does not change the machine or user execution policy.
+```
 
-macOS/Linux:
+The execution-policy change applies only to the current PowerShell process.
+It does not change the machine or user execution policy.
 
-source .venv/bin/activate
-Install dependencies after they are added to the relevant requirements file:
+Install the project dependencies:
 
+```powershell
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-python -m pip install -r local/requirements.txt
-Install the lightweight local Ollama chat model and the embedding model used for RAG:
+```
 
-ollama pull llama3.2:1b
-ollama pull nomic-embed-text
-ollama list
-
-Start Ollama in a separate PowerShell window if it is not already running:
-
-ollama serve
-
-Use the lightweight chat model for this project:
-
-$env:OLLAMA_BASE_URL = "http://localhost:11434"
-$env:OLLAMA_CHAT_MODEL = "llama3.2:1b"
-$env:OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
-
-Then run the local examples from the repository root as described in Running Each Script.
-
-## GenAI Local Ollama Setup
-
-Follow these steps whenever you want to test the local GenAI scripts again.
-
-1. Open a new PowerShell window and start the Ollama server:
+Run the local data-generation script from the `PredML` directory when needed:
 
 ```powershell
-ollama serve
+Set-Location .\PredML
+python .\src\00_generate_raw_data.py
 ```
 
-2. In the project terminal, activate the Python environment:
+## Docker
+
+Build the batch image from the repository root:
 
 ```powershell
-cd E:\Projects\mlops-genai-project
-. .\.venv\Scripts\Activate.ps1
+docker build -t predml-batch:latest -f .\PredML\docker\batch.Dockerfile .\PredML
 ```
 
-3. Set the environment variables for the local models:
+Run a training stage:
 
 ```powershell
-$env:OLLAMA_BASE_URL = "http://localhost:11434"
-$env:OLLAMA_CHAT_MODEL = "llama3.2:1b"
-$env:OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
+docker run --rm `
+  -e STAGE=04_train_model `
+  predml-batch:latest
 ```
 
-4. If the models are not already installed, pull them:
+Build the real-time API image:
 
 ```powershell
-ollama pull llama3.2:1b
-ollama pull nomic-embed-text
-ollama list
+docker build -t predml-api:latest -f .\PredML\docker\api.Dockerfile .\PredML
 ```
 
-5. Run the local GenAI examples from the repository root:
+The Docker Compose configuration is available at
+[`PredML/docker/docker-compose.yml`](./PredML/docker/docker-compose.yml).
+
+## AWS infrastructure
+
+The Terraform root module is
+[`PredML/AWS/terraform`](./PredML/AWS/terraform). It provisions the supporting
+PredML resources through reusable modules:
+
+- S3 data and artifact bucket
+- ECR repositories for batch and API images
+- SageMaker and EventBridge IAM roles
+- SageMaker MLflow tracking server
+- SageMaker Feature Store feature group
+- EventBridge schedules for batch inference and monitoring
+
+Create local Terraform values without committing them:
 
 ```powershell
-python "local/GenAI_ollama/src/01_langchain_local.py"
-python "local/GenAI_ollama/src/02_rag_local.py"
+Set-Location .\PredML\AWS\terraform
+Copy-Item .\terraform.tfvars.example .\terraform.tfvars
 ```
 
-6. Type a question such as:
+Review the values, then run:
 
-```text
-What is MLOps?
-```
-
-Then type:
-
-```text
-exit
-```
-
-This is the correct local workflow for testing the GenAI scripts: start Ollama first, then run the Python scripts.
-
-Project Structure
-.
-|-- local/
-|   |-- requirements.txt
-|   |-- Predictive ML/
-|   |   `-- src/
-|   |       |-- 01_model_training.py
-|   |       `-- 02_drift_detection.py
-|   `-- GenAI_ollama/
-|       |-- README.md
-|       `-- src/
-|           |-- 01_langchain_local.py
-|           |-- 02_rag_local.py
-|           |-- 03_langgraph_local.py
-|           |-- 04_api_server.py
-|           |-- ollama_config.py
-|           `-- privacy.py
-|-- tests/
-|   |-- test_api.py
-|   |-- test_drift.py
-|   `-- test_preprocesssing.py
-|-- docker/
-|   |-- Dockerfile
-|   `-- docker-compose.yml
-|-- k8s/
-|   `-- deployment.yaml
-|-- terraform/
-|   |-- mai.tf
-|   |-- output.tf
-|   |-- variable.tf
-|   `-- modules/
-|       |-- sagemaker/
-|       `-- vpc/
-|-- requirements.txt
-|-- pytest.ini
-`-- README.md
-File Descriptions
-Local source
-local/GenAI_ollama/README.md: Local Ollama setup, model flow, secure-RAG guidance, and troubleshooting.
-local/GenAI_ollama/src/01_langchain_local.py: Local LangChain orchestration example.
-local/GenAI_ollama/src/02_rag_local.py: Local RAG workflow using FAISS plus masked context and source-of-truth handling.
-local/GenAI_ollama/src/privacy.py: Redaction, access filtering, sanitization, and source-of-truth helpers.
-local/GenAI_ollama/src/03_langgraph_local.py: LangGraph workflow demonstrating stateful or multi-step agent orchestration.
-local/Predictive ML/src/02_drift_detection.py: Data or feature drift detection and monitoring example.
-local/Predictive ML/src/01_model_training.py: Model preprocessing, training, and evaluation workflow.
-local/GenAI_ollama/src/04_api_server.py: API entry point for serving the project functionality.
-Tests and dependencies
-tests/: Automated tests for the API, drift detection, and preprocessing/training behavior.
-requirements.txt: Shared project dependencies.
-local/requirements.txt: Dependencies specific to local experiments.
-pytest.ini: Pytest configuration.
-Deployment and infrastructure
-docker/Dockerfile: Image definition for packaging the application.
-docker/docker-compose.yml: Local multi-container orchestration.
-k8s/deployment.yaml: Kubernetes deployment configuration.
-terraform/mai.tf: Root Terraform resources and providers.
-terraform/variable.tf: Configurable Terraform inputs.
-terraform/output.tf: Values exposed after deployment.
-terraform/modules/sagemaker/: Reusable SageMaker infrastructure module.
-terraform/modules/vpc/: Reusable VPC/network infrastructure module.
-AWS vs Local
-Capability	Local development	AWS-oriented deployment
-LLM provider	Local or mock model, depending on implementation	Amazon Bedrock
-Safety controls	Application-level validation and test doubles	Bedrock Guardrails
-Vector search	FAISS	Amazon OpenSearch
-Model training	Local Python workflow	SageMaker processing/training pipelines
-Monitoring	Local drift checks and logs	SageMaker Model Monitor and cloud observability
-Infrastructure	Local Python, Docker, or Compose	Terraform-managed AWS resources
-Serving	Local API server	Docker/Kubernetes or AWS service deployment
-Use the local path for fast iteration and low-cost testing. Use the AWS path when validating managed services, production-like permissions, scalability, and deployment automation.
-
-Prerequisites
-Local
-Python 3.10 or newer
-pip and venv
-Git
-Docker Desktop, if using the container workflow
-A Kubernetes cluster and kubectl, if using the Kubernetes workflow
-AWS
-An AWS account with the required service quotas and Bedrock model access enabled
-AWS CLI configured with credentials for the target account
-Terraform installed
-IAM permissions for Bedrock, OpenSearch, SageMaker, networking, and supporting resources
-An AWS region selected for all services
-Keep credentials out of source control. Store configuration in environment variables, AWS profiles, or a secrets manager. Populate .env.example when the project configuration is implemented, but do not commit real secrets.
-
-Running Each Script
-Run commands from the repository root:
-
-python "local/GenAI_ollama/src/01_langchain_local.py"
-python "local/GenAI_ollama/src/02_rag_local.py"
-python "local/GenAI_ollama/src/03_langgraph_local.py"
-python "local/Predictive ML/src/02_drift_detection.py"
-python "local/Predictive ML/src/01_model_training.py"
-python "local/GenAI_ollama/src/04_api_server.py"
-The scripts are currently placeholders, so these commands will not provide useful output until their implementations and dependencies are added. The intended execution order for a completed local workflow is:
-
-Run the LangChain and LangGraph examples.
-Build and query the local RAG index.
-Train or load a model with the training script.
-Run drift detection against reference and current datasets.
-Start the API server and exercise it with the API tests.
-
-Infrastructure Deployment
-Review and customize Terraform variables before provisioning anything:
-
-cd terraform
+```powershell
 terraform init
-terraform fmt -check
 terraform validate
-terraform plan
-terraform apply
-After deployment, inspect exported values with:
+terraform plan -var-file="terraform.tfvars"
+terraform apply -var-file="terraform.tfvars"
+```
 
-terraform output
-Destroy resources only when they are no longer needed:
+The S3 state bucket configured in
+[`backend.tf`](./PredML/AWS/terraform/backend.tf) must already exist before
+normal `terraform init`. See [`PredML/AWS/Setup.txt`](./PredML/AWS/Setup.txt)
+for the broader AWS setup and service workflow.
 
-terraform destroy
-For a local container workflow, once docker/Dockerfile and Compose configuration are implemented:
+## CI/CD
 
-docker compose -f docker/docker-compose.yml build
-docker compose -f docker/docker-compose.yml up
-For Kubernetes, configure the target context and apply the manifest after the image has been built and made available to the cluster:
+[`cicd/Jenkinsfile-batch`](./cicd/Jenkinsfile-batch) runs on a weekly schedule
+or a configured Git webhook. It:
 
-kubectl config current-context
-kubectl apply -f k8s/deployment.yaml
-kubectl get deployments,pods,services
-Testing
-Run the test suite from the repository root:
+1. Builds and pushes the `predml-batch` image when `PredML/src/**` changes.
+2. Starts the `PredML-Training-Pipeline` SageMaker pipeline.
 
-python -m pytest
-As each component is implemented, add focused unit tests and integration tests for API behavior, preprocessing, drift calculations, retrieval quality, and deployment configuration.
+[`cicd/Jenkinsfile.terraform`](./cicd/Jenkinsfile.terraform) supports:
 
-Development Roadmap
-Add shared and local Python dependencies plus environment configuration.
-Implement the LangChain, LangGraph, and RAG examples with mock-friendly local tests.
-Implement preprocessing, model training, drift detection, and API serving.
-Add Bedrock and guardrail adapters behind clear configuration boundaries.
-Build SageMaker pipeline and monitoring integrations.
-Complete Terraform modules and validate infrastructure with terraform plan.
-Package the API with Docker and deploy it to Kubernetes.
-Expand CI checks for tests, linting, security scanning, and infrastructure validation.
+- Terraform validation and planning
+- Manual approval before apply
+- Manual approval before destroy
+- S3 remote state initialization
+
+Configure AWS credentials in Jenkins using credential IDs rather than putting
+keys in a Jenkinsfile.
+
+## Kubernetes
+
+Kubernetes manifests for batch jobs, scheduled monitoring, MLflow, and related
+services are under [`PredML/k8s`](./PredML/k8s). Review the manifests and
+namespace configuration before applying them to a cluster.
+
+## Security and generated files
+
+Do not commit:
+
+- `.venv` or any other Python virtual-environment directory
+- `.env` files, AWS credentials, Terraform variable files, or state files
+- private keys, certificates, local model files, datasets, or MLflow runs
+- generated caches, predictions, and monitoring artifacts
+
+The root [`.gitignore`](./.gitignore) excludes these files. Before pushing,
+check the staged file list:
+
+```powershell
+git status --short
+git diff --cached --name-only
+```
+
+If a secret was committed previously, remove it from the repository history
+and rotate the credential; adding it to `.gitignore` does not remove it from
+Git history.

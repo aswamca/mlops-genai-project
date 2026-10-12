@@ -1,0 +1,140 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        AWS_REGION            = 'ap-southeast-2'
+        TF_VAR_s3_bucket_name = 'predml-data-ap-southeast-2'
+        TF_ROOT               = 'PredML/AWS/terraform'
+    }
+
+    parameters {
+        choice(
+            name: 'TF_ACTION',
+            choices: ['plan', 'apply', 'destroy'],
+            description: 'Terraform action to run'
+        )
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Terraform') {
+            steps {
+                sh '''
+                    set -eu
+
+                    if ! command -v terraform >/dev/null 2>&1; then
+                        curl -fsSL https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_amd64.zip \
+                            -o terraform.zip
+                        unzip -o terraform.zip
+                        sudo mv terraform /usr/local/bin/terraform
+                        rm -f terraform.zip
+                    fi
+
+                    terraform version
+                '''
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                dir("${env.TF_ROOT}") {
+                    sh '''
+                        set -eu
+
+                        terraform init \
+                            -backend-config="bucket=predml-terraform-state-ap-southeast-2" \
+                            -backend-config="key=predml/terraform.tfstate" \
+                            -backend-config="region=${AWS_REGION}"
+                    '''
+                }
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                dir("${env.TF_ROOT}") {
+                    sh 'terraform validate'
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                dir("${env.TF_ROOT}") {
+                    sh '''
+                        set -eu
+
+                        terraform plan \
+                            -var-file="terraform.tfvars" \
+                            -out=tfplan
+                    '''
+                }
+            }
+        }
+
+        stage('Approval - Apply/Destroy Only') {
+            when {
+                expression { params.TF_ACTION in ['apply', 'destroy'] }
+            }
+            steps {
+                input(
+                    message: "Approve Terraform ${params.TF_ACTION}?",
+                    ok: 'Yes, proceed'
+                )
+            }
+        }
+
+        stage('Terraform Apply') {
+            when {
+                expression { params.TF_ACTION == 'apply' }
+            }
+            steps {
+                dir("${env.TF_ROOT}") {
+                    sh 'terraform apply -auto-approve tfplan'
+                }
+            }
+        }
+
+        stage('Terraform Destroy') {
+            when {
+                expression { params.TF_ACTION == 'destroy' }
+            }
+            steps {
+                dir("${env.TF_ROOT}") {
+                    sh '''
+                        set -eu
+
+                        terraform destroy \
+                            -var-file="terraform.tfvars" \
+                            -auto-approve
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Terraform ${params.TF_ACTION} completed successfully"
+        }
+        failure {
+            echo "Terraform ${params.TF_ACTION} failed - check logs"
+        }
+        always {
+            dir("${env.TF_ROOT}") {
+                archiveArtifacts(
+                    artifacts: 'tfplan',
+                    allowEmptyArchive: true,
+                    fingerprint: true
+                )
+            }
+        }
+    }
+}
