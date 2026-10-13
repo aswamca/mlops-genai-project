@@ -186,6 +186,9 @@ or a configured Git webhook. It:
 Configure AWS credentials in Jenkins using credential IDs rather than putting
 keys in a Jenkinsfile.
 
+The reusable Jenkins agent image and WSL Docker socket setup are documented in
+[`cicd/README.md`](./cicd/README.md).
+
 ## Kubernetes
 
 Kubernetes manifests for batch jobs, scheduled monitoring, MLflow, and related

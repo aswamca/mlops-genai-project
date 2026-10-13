@@ -2,6 +2,130 @@
 
 Issues encountered while running the PredML Docker Compose and MLflow workflow.
 
+## 2026-10-13
+
+### Jenkins WSL agent could not reach the Windows Jenkins controller
+
+- **Symptom:** The Jenkins inbound agent repeatedly tried to connect to
+  `http://host.docker.internal:8080/` and logged
+  `UnknownHostException: host.docker.internal`. After changing the controller
+  port to `8081`, requests from Ubuntu WSL to both `localhost:8081` and the
+  Windows host addresses timed out.
+- **Cause:** Jenkins was running on Windows at port `8081`, while the agent was
+  running under a native Docker Engine inside Ubuntu WSL. In this setup,
+  `host.docker.internal` is not automatically resolvable, and Windows'
+  inbound firewall did not allow the WSL virtual adapter to reach port `8081`.
+  The Docker socket and Jenkins listener were functioning correctly.
+- **Resolution:** Confirmed the Windows Jenkins service was running and
+  listening on `0.0.0.0:8081`. In elevated Windows PowerShell, added a
+  narrowly scoped inbound firewall rule for the WSL adapter:
+
+  ```powershell
+  New-NetFirewallRule `
+      -DisplayName "Allow Jenkins from WSL" `
+      -Direction Inbound `
+      -Action Allow `
+      -Protocol TCP `
+      -LocalPort 8081 `
+      -InterfaceAlias "vEthernet (WSL (Hyper-V firewall))" `
+      -Profile Any
+  ```
+
+  From Ubuntu WSL, verified the controller with:
+
+  ```bash
+  curl --fail --connect-timeout 5 http://172.31.176.1:8081/login
+  ```
+
+  The response returned the Jenkins sign-in page successfully. The agent
+  should use the WSL gateway address and the Jenkins controller's actual port:
+
+  ```bash
+  docker rm --force predml-ci-agent 2>/dev/null || true
+
+  docker run --detach \
+    --name predml-ci-agent \
+    --network host \
+    --volume /var/run/docker.sock:/var/run/docker.sock \
+    predml-ci:1.0 \
+    -url "http://172.31.176.1:8081" \
+    -secret "<agent-secret>" \
+    -name "predml-ci-agent"
+  ```
+
+- **Result:** WSL can reach Jenkins over port `8081`. The agent no longer
+  depends on Docker Desktop or an automatically provided
+  `host.docker.internal` hostname. The agent secret remains private and must
+  be replaced locally rather than committed to the repository.
+
+### Jenkins agent verification and laptop shutdown behavior
+
+- **Verification:** A running `predml-ci-agent` container is not sufficient to
+  prove that Jenkins can use it. Confirm the agent logs contain both
+  `WebSocket connection open` and `Connected`, confirm the node is **Online**
+  at `http://localhost:8081/computer/`, and verify Docker access with:
+
+  ```bash
+  docker ps
+  docker logs --tail=100 predml-ci-agent
+  docker exec predml-ci-agent docker version
+  ```
+
+- **Shutdown behavior:** Shutting down or restarting the laptop stops the
+  Jenkins Windows service, Ubuntu WSL, and the running agent container. The
+  container and `predml-ci:1.0` image remain stored, but the container does not
+  automatically reconnect by itself.
+- **Resolution:** After Windows Jenkins and Ubuntu WSL are available again,
+  restart Docker and the existing agent:
+
+  ```bash
+  sudo service docker start
+  docker start predml-ci-agent
+  docker logs --tail=100 predml-ci-agent
+  ```
+
+  If the container was removed, recreate it with the native WSL Docker
+  command documented above. If the WSL gateway address changes, recalculate it
+  with `ip route` and update the agent URL before recreating the container.
+
+### Jenkins agent could not access the Docker socket
+
+- **Symptom:** The agent connected to Jenkins, but
+  `docker exec predml-ci-agent docker version` showed the Docker client and
+  then failed with `permission denied` for
+  `unix:///var/run/docker.sock`.
+- **Cause:** The image runs Jenkins as the non-root `jenkins` user. Mounting
+  `/var/run/docker.sock` exposes the socket, but does not automatically add
+  the container user to the socket's group.
+- **Resolution:** Recreate the agent with the numeric group ID of the WSL
+  Docker socket:
+
+  ```bash
+  DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
+
+  docker rm --force predml-ci-agent
+
+  docker run --detach \
+    --name predml-ci-agent \
+    --network host \
+    --group-add "$DOCKER_SOCK_GID" \
+    --volume /var/run/docker.sock:/var/run/docker.sock \
+    predml-ci:1.0 \
+    -url "http://172.31.176.1:8081" \
+    -webSocket \
+    -secret "<agent-secret>" \
+    -name "predml-ci-agent"
+  ```
+
+- **Verification:** Confirm Docker access as the agent user:
+
+  ```bash
+  docker exec predml-ci-agent docker version
+  ```
+
+  The command should show both Docker **Client** and **Server** sections
+  without a permission error.
+
 ## 2026-10-11
 
 ### MLflow rejected requests from the batch container
