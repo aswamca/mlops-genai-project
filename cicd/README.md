@@ -211,6 +211,54 @@ The agent container uses the host Docker socket. This gives Jenkins jobs
 significant control over Docker, so only use it on a trusted local machine and
 do not expose Jenkins port 8081 to an untrusted network.
 
+### Cold-start order after a laptop restart
+
+Use this order whenever Windows or the laptop has been restarted:
+
+1. Confirm that the Jenkins Windows service is running from elevated
+   PowerShell:
+
+   ```powershell
+   Get-Service Jenkins
+   Start-Service Jenkins
+   ```
+
+   `Start-Service` reports that the service is already running if no action is
+   needed.
+2. Open Ubuntu WSL from PowerShell or the Start menu:
+
+   ```powershell
+   wsl -d Ubuntu
+   ```
+3. Start the native WSL Docker Engine and verify it:
+
+   ```bash
+   sudo service docker start
+   docker info
+   ```
+4. Start the existing Jenkins agent container:
+
+   ```bash
+   docker start predml-ci-agent
+   docker logs --tail=100 predml-ci-agent
+   docker exec predml-ci-agent docker version
+   ```
+
+   To start the agent later without recreating the container, use:
+
+   ```bash
+   docker start predml-ci-agent
+   docker logs --tail=100 predml-ci-agent
+   ```
+5. Confirm the logs contain `WebSocket connection open` and `Connected`, then
+   confirm `predml-ci-agent` is **Online** at
+   `http://localhost:8081/computer/`.
+
+The `predml-ci:1.0` image and the stopped `predml-ci-agent` container persist
+across restarts, so rebuilding the image is not normally required. If the
+container was deleted, recreate it with the `docker run` command above. If the
+WSL gateway address changed, update the agent URL before recreating it.
+
 ### Restart the agent after shutdown
 
 Shutting down or restarting the laptop stops the Jenkins Windows service,
@@ -278,9 +326,134 @@ agent {
 - [`Jenkinsfile.terraform`](./Jenkinsfile.terraform): validates, plans,
   applies, or destroys Terraform infrastructure.
 
-When the pre-built agent image is used, the Terraform installation stage in
-`Jenkinsfile.terraform` is redundant and can be removed. The agent image
-already contains Terraform.
+### Jenkins pipeline setup
+
+Use this order for the first deployment:
+
+1. Confirm the `predml-ci-agent` node is **Online**.
+2. Run the Terraform pipeline with `TF_ACTION=plan`.
+3. Review the plan and confirm the AWS account and resources.
+4. Run the Terraform pipeline with `TF_ACTION=apply`.
+5. Approve the Jenkins approval prompt.
+6. Verify the AWS resources and Terraform outputs.
+7. Run the batch pipeline.
+
+Do not run `destroy` unless you intentionally want to remove the managed
+infrastructure.
+
+#### Connect Jenkins to GitHub
+
+For a private repository, create a GitHub fine-grained personal access token
+with access limited to this repository and **Contents: Read-only** permission.
+Do not use your GitHub password.
+
+In Jenkins, go to **Manage Jenkins > Credentials > System > Global credentials
+(unrestricted) > Add Credentials** and create:
+
+```text
+Kind: Username with password
+Username: your GitHub username
+Password: GitHub personal access token
+ID: github-repository-read
+```
+
+For a public repository, Git credentials are normally not required. Never
+commit GitHub tokens, AWS keys, or Jenkins agent secrets.
+
+#### Create the Terraform pipeline job
+
+1. Select **New Item**.
+2. Enter `predml-terraform-pipeline`.
+3. Select **Pipeline** and click **OK**.
+4. In the **Pipeline** section, select **Pipeline script from SCM**.
+5. Select **Git** as the SCM.
+6. Set the repository URL:
+
+   ```text
+   https://github.com/aswamca/mlops-genai-project.git
+   ```
+
+7. Select the GitHub credential if the repository is private.
+8. Set the branch specifier to:
+
+   ```text
+   */main
+   ```
+
+9. Set the script path to:
+
+   ```text
+   cicd/Jenkinsfile.terraform
+   ```
+
+10. Save the job.
+
+Select **Build with Parameters**, choose `plan`, and start the build. The
+pipeline checks AWS access, prepares the encrypted/versioned Terraform state
+bucket, initializes the local modules under `PredML/AWS/terraform/modules`,
+validates the configuration, and archives the Terraform plan.
+
+After reviewing a successful plan, run **Build with Parameters** again with
+`TF_ACTION=apply`. Approve the prompt only after confirming the intended AWS
+account and resources.
+
+The Terraform pipeline expects these Jenkins credential IDs:
+
+```text
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+```
+
+It sets the S3 bucket name and AWS region from the pipeline environment. The
+remote state bucket is `predml-terraform-state-ap-southeast-2` and the state
+key is `predml/terraform.tfstate`.
+
+#### Create the batch pipeline job
+
+After Terraform succeeds:
+
+1. Select **New Item**.
+2. Enter `predml-batch-pipeline`.
+3. Select **Pipeline** and click **OK**.
+4. Select **Pipeline script from SCM**.
+5. Select **Git**.
+6. Use the same repository URL, branch, and GitHub credential as the Terraform
+   job.
+7. Set the script path to:
+
+   ```text
+   cicd/Jenkinsfile-batch
+   ```
+
+8. Save the job and select **Build Now**.
+
+The batch pipeline expects these Jenkins credential IDs:
+
+```text
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AWS_ACCOUNT_ID
+```
+
+It builds and pushes the `predml-batch` image to ECR when
+`PredML/src/**` changes, then starts the configured SageMaker training
+pipeline.
+
+#### Triggering builds
+
+Use manual **Build with Parameters** or **Build Now** for the first runs.
+GitHub cannot normally send a webhook to `http://localhost:8081`; a webhook
+requires a secure, reachable HTTPS endpoint. SCM polling can be configured
+later if required, but manual runs are recommended until the pipelines have
+been verified.
+
+Both Jenkinsfiles select the WSL agent with:
+
+```groovy
+agent {
+    label 'predml-ci'
+}
+```
 
 ## Jenkins web login recovery
 

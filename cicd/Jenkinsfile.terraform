@@ -1,11 +1,15 @@
 pipeline {
-    agent any
+    agent {
+        label 'predml-ci'
+    }
 
     environment {
         AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
         AWS_REGION            = 'ap-southeast-2'
         TF_VAR_s3_bucket_name = 'predml-data-ap-southeast-2'
+        TF_STATE_BUCKET       = 'predml-terraform-state-ap-southeast-2'
+        TF_STATE_KEY          = 'predml/terraform.tfstate'
         TF_ROOT               = 'PredML/AWS/terraform'
     }
 
@@ -24,20 +28,38 @@ pipeline {
             }
         }
 
-        stage('Install Terraform') {
+        stage('Verify AWS and Terraform') {
             steps {
                 sh '''
                     set -eu
 
-                    if ! command -v terraform >/dev/null 2>&1; then
-                        curl -fsSL https://releases.hashicorp.com/terraform/1.7.0/terraform_1.7.0_linux_amd64.zip \
-                            -o terraform.zip
-                        unzip -o terraform.zip
-                        sudo mv terraform /usr/local/bin/terraform
-                        rm -f terraform.zip
-                    fi
-
+                    aws sts get-caller-identity --region "${AWS_REGION}" >/dev/null
                     terraform version
+                '''
+            }
+        }
+
+        stage('Prepare Terraform backend') {
+            steps {
+                sh '''
+                    set -eu
+
+                    if ! aws s3api head-bucket \
+                        --bucket "${TF_STATE_BUCKET}" \
+                        --region "${AWS_REGION}" >/dev/null 2>&1; then
+                        aws s3api create-bucket \
+                            --bucket "${TF_STATE_BUCKET}" \
+                            --region "${AWS_REGION}" \
+                            --create-bucket-configuration \
+                                LocationConstraint="${AWS_REGION}"
+                        aws s3api put-bucket-versioning \
+                            --bucket "${TF_STATE_BUCKET}" \
+                            --versioning-configuration Status=Enabled
+                        aws s3api put-bucket-encryption \
+                            --bucket "${TF_STATE_BUCKET}" \
+                            --server-side-encryption-configuration \
+                                '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+                    fi
                 '''
             }
         }
@@ -49,8 +71,10 @@ pipeline {
                         set -eu
 
                         terraform init \
-                            -backend-config="bucket=predml-terraform-state-ap-southeast-2" \
-                            -backend-config="key=predml/terraform.tfstate" \
+                            -upgrade \
+                            -reconfigure \
+                            -backend-config="bucket=${TF_STATE_BUCKET}" \
+                            -backend-config="key=${TF_STATE_KEY}" \
                             -backend-config="region=${AWS_REGION}"
                     '''
                 }
@@ -71,9 +95,13 @@ pipeline {
                     sh '''
                         set -eu
 
-                        terraform plan \
-                            -var-file="terraform.tfvars" \
-                            -out=tfplan
+                        if [ "${TF_ACTION}" = "destroy" ]; then
+                            terraform plan \
+                                -destroy \
+                                -out=tfplan
+                        else
+                            terraform plan -out=tfplan
+                        fi
                     '''
                 }
             }
@@ -108,13 +136,7 @@ pipeline {
             }
             steps {
                 dir("${env.TF_ROOT}") {
-                    sh '''
-                        set -eu
-
-                        terraform destroy \
-                            -var-file="terraform.tfvars" \
-                            -auto-approve
-                    '''
+                    sh 'terraform apply -auto-approve tfplan'
                 }
             }
         }
