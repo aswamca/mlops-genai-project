@@ -350,6 +350,13 @@ URI must be supplied with `MLFLOW_TRACKING_URI` (or
 Changes to `PredML/AWS/src` or `PredML/docker/batch.Dockerfile` rebuild and push
 the AWS image.
 
+The AWS image does not generate seed data. Upload the raw input file to
+`s3://<bucket>/<prefix>/data/01_raw/raw_data_pharma_transactions.csv` before
+running stage `01_preprocess`. The AWS implementation keeps
+`mlflow_registry.py` because the SageMaker MLflow Tracking Server currently
+provides model registration, aliases, and promotion; it can be replaced later
+when SageMaker Model Registry is adopted.
+
 #### Connect Jenkins to GitHub
 
 For a private repository, create a GitHub fine-grained personal access token

@@ -1,9 +1,9 @@
 # AWS batch image for preprocessing, training, inference, monitoring,
 # forecasting, and rollback. Local source under PredML/src is not used here.
-# Copies requirements-batch.txt plus src/config.py, src/mlflow_registry.py, and
+# Copies requirements-aws.txt plus src/config.py, src/mlflow_registry.py, and
 # src/01_preprocess.py through src/06_batch_inference.py, then
-# src/08_model_monitoring.py through src/10_rollback.py. Deliberately excludes
-# src/00_generate_raw_data.py and all datasets/model/database artifacts.
+# src/08_model_monitoring.py through src/10_rollback.py. Raw data is uploaded
+# to S3 separately; datasets/model/database artifacts are not included.
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -35,11 +35,6 @@ COPY AWS/src/config.py AWS/src/mlflow_registry.py \
 
 ENTRYPOINT ["sh", "-c", \
     "stage=${STAGE:?STAGE is required (for example STAGE=04_train_model)}; \
-    if [ \"$stage\" = \"00_generate_raw_data\" ]; then \
-        echo '00_generate_raw_data is a local data seeder and is not included in this image.' >&2; \
-        echo 'Run the AWS data seeder with S3_BUCKET set: python AWS/src/00_generate_raw_data.py' >&2; \
-        exit 2; \
-    fi; \
     case \"$stage\" in \
         01_preprocess|02_feature_engineering|03_feature_store|04_train_model|05_register_model|06_batch_inference|08_model_monitoring|09_forecast|10_rollback) ;; \
         *) echo \"Unsupported STAGE: $stage\" >&2; \

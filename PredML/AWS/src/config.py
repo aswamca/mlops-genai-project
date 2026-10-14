@@ -2,6 +2,7 @@
 
 All durable data and model state is stored in S3.  The local implementation
 under ``PredML/src`` intentionally keeps its filesystem-backed configuration.
+Raw input data is uploaded to S3 before the AWS pipeline starts.
 """
 
 from __future__ import annotations
