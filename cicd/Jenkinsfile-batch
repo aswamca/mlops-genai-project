@@ -53,17 +53,17 @@ pipeline {
             }
         }
 
-        stage('Trigger Training Pipeline') {
-            steps {
-                sh '''
-                    set -eu
+        // stage('Trigger Training Pipeline') {
+        //     steps {
+        //         sh '''
+        //             set -eu
 
-                    aws sagemaker start-pipeline-execution \
-                        --pipeline-name "${TRAINING_PIPELINE}" \
-                        --region "${AWS_REGION}"
-                '''
-            }
-        }
+        //             aws sagemaker start-pipeline-execution \
+        //                 --pipeline-name "${TRAINING_PIPELINE}" \
+        //                 --region "${AWS_REGION}"
+        //         '''
+        //     }
+        // }
     }
 
     post {
