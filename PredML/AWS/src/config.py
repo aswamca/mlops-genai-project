@@ -14,7 +14,7 @@ import fsspec
 
 AWS_REGION = os.environ.get("AWS_DEFAULT_REGION", os.environ.get("AWS_REGION", "ap-southeast-2"))
 S3_BUCKET = os.environ.get("S3_BUCKET", "").strip()
-S3_PREFIX = os.environ.get("S3_PREFIX", "predml").strip("/")
+S3_PREFIX = os.environ.get("S3_PREFIX", "").strip("/")
 if not S3_BUCKET:
     raise RuntimeError("S3_BUCKET is required for the AWS stage scripts.")
 
@@ -57,16 +57,15 @@ def banner(msg: str, char: str = "=") -> None:
     print(f"\n{char * 72}\n{msg}\n{char * 72}")
 
 
-DATA_PREFIX = "data"
-RAW_DIR = s3_path(DATA_PREFIX, "01_raw")
-PROCESSED_DIR = s3_path(DATA_PREFIX, "02_processed")
-FEATURE_STORE = s3_path(DATA_PREFIX, "03_features_store")
-OFFLINE_STORE = s3_path(DATA_PREFIX, "03_features_store", "offline")
-ONLINE_STORE = s3_path(DATA_PREFIX, "03_features_store", "online")
+RAW_DIR = s3_path("input")
+PROCESSED_DIR = s3_path("processed")
+FEATURE_STORE = s3_path("features")
+OFFLINE_STORE = s3_path("features", "offline")
+ONLINE_STORE = s3_path("features", "online")
 
-REGISTRY_DIR = s3_path("model", "registry", "cost_forecaster")
-PRODUCTION_VERSION_FILE = s3_path("model", "registry", "cost_forecaster", "production_version.txt")
-PREDICTIONS_DIR = s3_path("predictions", "batch")
+REGISTRY_DIR = s3_path("models", "cost_forecaster")
+PRODUCTION_VERSION_FILE = s3_path("models", "cost_forecaster", "production_version.txt")
+PREDICTIONS_DIR = s3_path("output", "predictions", "batch")
 BASELINE_DIR = s3_path("monitoring", "baseline")
 REPORTS_DIR = s3_path("monitoring", "reports")
 
@@ -76,15 +75,15 @@ MLFLOW_URI = os.environ.get(
 )
 MLFLOW_EXPERIMENT = os.environ.get("MLFLOW_EXPERIMENT", "pharmacy_cost_forecasting_aws")
 MLFLOW_REGISTERED_MODEL_NAME = os.environ.get("MLFLOW_REGISTERED_MODEL_NAME", "cost_forecaster")
-MLFLOW_ARTIFACTS = os.environ.get("MLFLOW_ARTIFACTS", f"{S3_ROOT}/mlflow-artifacts")
+MLFLOW_ARTIFACTS = os.environ.get("MLFLOW_ARTIFACTS", s3_path("mlflow-artifacts"))
 CHAMPION_ALIAS = "champion"
 PREVIOUS_ALIAS = "previous"
 
-RAW_FILE = s3_path(DATA_PREFIX, "01_raw", "raw_data_pharma_transactions.csv")
-PROCESSED_FILE = s3_path(DATA_PREFIX, "02_processed", "transactions_clean.parquet")
-OFFLINE_FILE = s3_path(DATA_PREFIX, "03_features_store", "offline", "features.parquet")
-ONLINE_FILE = s3_path(DATA_PREFIX, "03_features_store", "online", "latestr_features.json")
-PRODUCT_MASTER_FILE = s3_path(DATA_PREFIX, "product_master.json")
+RAW_FILE = s3_path("input", "raw_data.csv")
+PROCESSED_FILE = s3_path("processed", "transactions_clean.parquet")
+OFFLINE_FILE = s3_path("features", "offline", "features.parquet")
+ONLINE_FILE = s3_path("features", "online", "latestr_features.json")
+PRODUCT_MASTER_FILE = s3_path("input", "product_master.json")
 
 PRODUCTS = [
     ("PRD001", "Entresto", "Cardiovascular", 180_000, 0.28),

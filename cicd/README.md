@@ -350,9 +350,12 @@ URI must be supplied with `MLFLOW_TRACKING_URI` (or
 Changes to `PredML/AWS/src` or `PredML/docker/batch.Dockerfile` rebuild and push
 the AWS image.
 
-The AWS image does not generate seed data. Upload the raw input file to
-`s3://<bucket>/<prefix>/data/01_raw/raw_data_pharma_transactions.csv` before
-running stage `01_preprocess`. The AWS implementation keeps
+The AWS image does not generate seed data. Upload the raw input file to the
+Terraform-created `input/` prefix:
+`s3://<bucket>/<prefix>/input/raw_data.csv` before running stage
+`01_preprocess`. AWS stages use the Terraform-created `processed/`,
+`features/`, `models/`, `output/`, `monitoring/`, and `mlflow-artifacts/`
+prefixes. The AWS implementation keeps
 `mlflow_registry.py` because the SageMaker MLflow Tracking Server currently
 provides model registration, aliases, and promotion; it can be replaced later
 when SageMaker Model Registry is adopted.
