@@ -28,7 +28,10 @@ pipeline {
         stage('Build & Push predml-batch') {
             // Rebuild the image only when the batch source changes.
             when {
-                changeset 'PredML/src/**'
+                anyOf {
+                    changeset 'PredML/AWS/src/**'
+                    changeset 'PredML/docker/batch.Dockerfile'
+                }
             }
             steps {
                 dir('PredML') {
@@ -56,7 +59,10 @@ pipeline {
         stage('Trigger Training Pipeline') {
             // Trigger only when the image build/push stage ran successfully.
             when {
-                changeset 'PredML/src/**'
+                anyOf {
+                    changeset 'PredML/AWS/src/**'
+                    changeset 'PredML/docker/batch.Dockerfile'
+                }
             }
             steps {
                 sh '''

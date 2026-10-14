@@ -341,6 +341,15 @@ Use this order for the first deployment:
 Do not run `destroy` unless you intentionally want to remove the managed
 infrastructure.
 
+The AWS batch image uses the cloud-specific implementation under
+`PredML/AWS/src`; the local implementation under `PredML/src` is not modified
+or packaged into that image. AWS stages read and write S3 through the
+`S3_BUCKET` and optional `S3_PREFIX` environment variables. The MLflow tracking
+URI must be supplied with `MLFLOW_TRACKING_URI` (or
+`SAGEMAKER_MLFLOW_TRACKING_URI`) when running a training or registry stage.
+Changes to `PredML/AWS/src` or `PredML/docker/batch.Dockerfile` rebuild and push
+the AWS image.
+
 #### Connect Jenkins to GitHub
 
 For a private repository, create a GitHub fine-grained personal access token
