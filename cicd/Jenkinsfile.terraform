@@ -11,6 +11,7 @@ pipeline {
         TF_STATE_BUCKET       = 'predml-terraform-state-ap-southeast-2'
         TF_STATE_KEY          = 'predml/terraform.tfstate'
         TF_ROOT               = 'PredML/AWS/terraform'
+        TF_CLI_ARGS           = '-no-color'
     }
 
     parameters {
