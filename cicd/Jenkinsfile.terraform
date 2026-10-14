@@ -108,18 +108,6 @@ pipeline {
             }
         }
 
-        stage('Approval - Apply/Destroy Only') {
-            when {
-                expression { params.TF_ACTION in ['apply', 'destroy'] }
-            }
-            steps {
-                input(
-                    message: "Approve Terraform ${params.TF_ACTION}?",
-                    ok: 'Yes, proceed'
-                )
-            }
-        }
-
         stage('Terraform Apply') {
             when {
                 expression { params.TF_ACTION == 'apply' }
