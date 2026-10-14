@@ -439,6 +439,11 @@ It builds and pushes the `predml-batch` image to ECR when
 `PredML/src/**` changes, then starts the configured SageMaker training
 pipeline.
 
+After the batch job finishes, its `post` cleanup removes the local Docker image
+tags, logs out of ECR, and deletes the Jenkins workspace. The image remains in
+ECR; only the temporary copy and checkout on the WSL agent are removed, which
+prevents the agent disk from filling up.
+
 #### Triggering builds
 
 Use manual **Build with Parameters** or **Build Now** for the first runs.

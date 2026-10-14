@@ -67,6 +67,19 @@ pipeline {
     }
 
     post {
+        always {
+            sh '''
+                set +e
+
+                ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                docker image rm \
+                    "${ECR_REPOSITORY}:latest" \
+                    "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest" \
+                    >/dev/null 2>&1
+                docker logout "${ECR_REGISTRY}" >/dev/null 2>&1
+            '''
+            deleteDir()
+        }
         success {
             echo 'PredML training pipeline triggered successfully'
         }
