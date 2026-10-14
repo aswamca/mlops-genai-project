@@ -1,3 +1,4 @@
+##to generate rawa data for the prediction model
 import numpy as np
 import pandas as pd
 import json
