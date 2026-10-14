@@ -126,6 +126,23 @@ Issues encountered while running the PredML Docker Compose and MLflow workflow.
   The command should show both Docker **Client** and **Server** sections
   without a permission error.
 
+### Terraform apply failed to create EventBridge SageMaker schedules
+
+- **Symptom:** Terraform created the IAM roles, ECR repositories, S3 bucket,
+  Feature Store group, and SageMaker MLflow tracking server, but both
+  EventBridge schedules failed with:
+  `Parameters SageMakerPipelineParameters must be specified.`
+- **Cause:** Empty `sagemaker_pipeline_parameters` blocks were rendered in the
+  EventBridge target. AWS rejected those empty parameter objects because the
+  SageMaker pipelines currently have no runtime parameters.
+- **Resolution:** Removed the empty `sagemaker_pipeline_parameters` blocks from
+  both schedules. Terraform now omits the optional target parameter object so
+  SageMaker starts each pipeline with its configured defaults.
+- **Next step:** Push the fix and rerun the Terraform pipeline with
+  `TF_ACTION=apply`. Terraform should retain the resources already recorded in
+  remote state and create the two missing schedules. Review the plan before
+  applying if the plan reports any changes beyond those schedules.
+
 ## 2026-10-11
 
 ### MLflow rejected requests from the batch container

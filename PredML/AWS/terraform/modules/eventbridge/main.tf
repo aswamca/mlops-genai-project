@@ -11,8 +11,6 @@ resource "aws_scheduler_schedule" "batch_inference" {
     arn      = "arn:aws:sagemaker:${var.aws_region}:${var.aws_account_id}:pipeline/${var.batch_pipeline_name}"
     role_arn = var.sagemaker_role_arn
 
-    sagemaker_pipeline_parameters {
-    }
   }
 }
 
@@ -29,7 +27,5 @@ resource "aws_scheduler_schedule" "monitoring" {
     arn      = "arn:aws:sagemaker:${var.aws_region}:${var.aws_account_id}:pipeline/${var.monitoring_pipeline_name}"
     role_arn = var.sagemaker_role_arn
 
-    sagemaker_pipeline_parameters {
-    }
   }
 }
