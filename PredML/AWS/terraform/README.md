@@ -31,7 +31,7 @@ cannot use a backend resource before that resource exists. Do not commit
 
 ## Jenkins deployment
 
-The Jenkins Terraform pipeline runs on the `predml-ci` agent. It uses the AWS
+The Jenkins Terraform pipeline runs on the Jenkins built-in Windows node. It uses the AWS
 credentials stored in Jenkins with IDs `AWS_ACCESS_KEY_ID` and
 `AWS_SECRET_ACCESS_KEY`, sets `TF_VAR_s3_bucket_name` for the root module, and
 bootstraps the remote state bucket if it does not exist.

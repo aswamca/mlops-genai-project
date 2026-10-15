@@ -311,7 +311,15 @@ agent configuration. The Jenkins node should have the label:
 predml-ci
 ```
 
-Then use that label in the pipelines:
+The pipelines use `agent any`, so they run on the built-in Windows node by
+default when no other online executor is available. Because the pipeline uses
+Windows `bat` steps, keep the old Linux `predml-ci` node offline or configure
+the jobs so they can run only on the Windows built-in node. The Windows
+Jenkins service account must be able to resolve `aws`, `docker`, and
+`terraform` from its `PATH`.
+
+The old Linux agent setup is optional and is not required for these pipelines.
+If a label is used in a custom pipeline, configure it separately:
 
 ```groovy
 agent {
@@ -321,8 +329,9 @@ agent {
 
 ## Jenkins pipelines
 
-- [`Jenkinsfile-batch`](./Jenkinsfile-batch): builds and pushes the batch image
-  and starts the SageMaker training pipeline.
+- [`Jenkinsfile-batch`](./Jenkinsfile-batch): builds and pushes the batch image,
+  builds and pushes the realtime API image to the API ECR repository, and
+  starts the SageMaker training pipeline.
 - [`Jenkinsfile.terraform`](./Jenkinsfile.terraform): validates, plans,
   applies, or destroys Terraform infrastructure.
 
@@ -330,7 +339,7 @@ agent {
 
 Use this order for the first deployment:
 
-1. Confirm the `predml-ci-agent` node is **Online**.
+1. Confirm the Jenkins built-in Windows node has an executor available.
 2. Run the Terraform pipeline with `TF_ACTION=plan`.
 3. Review the plan and confirm the AWS account and resources.
 4. Run the Terraform pipeline with `TF_ACTION=apply`.
@@ -455,13 +464,13 @@ AWS_ACCOUNT_ID
 ```
 
 It builds and pushes the `predml-batch` image to ECR when
-`PredML/src/**` changes, then starts the configured SageMaker training
-pipeline.
+`PredML/AWS/src/**` or the batch Dockerfile changes. It builds and pushes the
+realtime API image to `predml-api` when `PredML/src/**`, the API Dockerfile, or
+the API requirements change. Batch changes also start the configured SageMaker
+training pipeline.
 
-After the batch job finishes, its `post` cleanup removes the local Docker image
-tags, logs out of ECR, and deletes the Jenkins workspace. The image remains in
-ECR; only the temporary copy and checkout on the WSL agent are removed, which
-prevents the agent disk from filling up.
+After the job finishes, its `post` cleanup removes the local Docker image tags,
+logs out of ECR, and deletes the Jenkins workspace. The images remain in ECR.
 
 #### Triggering builds
 
@@ -471,12 +480,10 @@ requires a secure, reachable HTTPS endpoint. SCM polling can be configured
 later if required, but manual runs are recommended until the pipelines have
 been verified.
 
-Both Jenkinsfiles select the WSL agent with:
+Both Jenkinsfiles use the Jenkins built-in Windows node with:
 
 ```groovy
-agent {
-    label 'predml-ci'
-}
+agent any
 ```
 
 ## Jenkins web login recovery

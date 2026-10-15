@@ -173,8 +173,10 @@ for the broader AWS setup and service workflow.
 [`cicd/Jenkinsfile-batch`](./cicd/Jenkinsfile-batch) runs on a weekly schedule
 or a configured Git webhook. It:
 
-1. Builds and pushes the `predml-batch` image when `PredML/src/**` changes.
-2. Starts the `PredML-Training-Pipeline` SageMaker pipeline.
+1. Builds and pushes the `predml-batch` image when AWS batch sources change.
+2. Builds and pushes the realtime API image to `predml-api` when the API sources
+   change.
+3. Starts the `PredML-Training-Pipeline` SageMaker pipeline for batch changes.
 
 [`cicd/Jenkinsfile.terraform`](./cicd/Jenkinsfile.terraform) supports:
 

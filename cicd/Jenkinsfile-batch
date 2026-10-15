@@ -1,7 +1,5 @@
 pipeline {
-    agent {
-        label 'predml-ci'
-    }
+    agent any
 
     triggers {
         // Run every Sunday at midnight.
@@ -14,7 +12,8 @@ pipeline {
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
         AWS_ACCOUNT_ID        = credentials('AWS_ACCOUNT_ID')
         AWS_REGION            = 'ap-southeast-2'
-        ECR_REPOSITORY        = 'predml-batch'
+        BATCH_REPOSITORY      = 'predml-batch'
+        API_REPOSITORY        = 'predml-api'
         TRAINING_PIPELINE     = 'PredML-Training-Pipeline'
     }
 
@@ -22,6 +21,18 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Verify Windows tools') {
+            steps {
+                bat '''
+                    @echo off
+                    where aws
+                    if errorlevel 1 exit /b 1
+                    where docker
+                    if errorlevel 1 exit /b 1
+                '''
             }
         }
 
@@ -34,25 +45,42 @@ pipeline {
                 }
             }
             steps {
-                dir('PredML') {
-                    sh '''
-                        set -eu
+                bat '''
+                    @echo off
+                    set "ECR_REGISTRY=%AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com"
 
-                        ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                    aws ecr get-login-password --region "%AWS_REGION%" | docker login --username AWS --password-stdin "%ECR_REGISTRY%"
+                    if errorlevel 1 exit /b 1
 
-                        aws ecr get-login-password --region "${AWS_REGION}" | \
-                            docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+                    docker build -t "%BATCH_REPOSITORY%:latest" -f PredML\\docker\\batch.Dockerfile PredML
+                    if errorlevel 1 exit /b 1
+                    docker tag "%BATCH_REPOSITORY%:latest" "%ECR_REGISTRY%/%BATCH_REPOSITORY%:latest"
+                    docker push "%ECR_REGISTRY%/%BATCH_REPOSITORY%:latest"
+                '''
+            }
+        }
 
-                        docker build \
-                            -t "${ECR_REPOSITORY}:latest" \
-                            -f docker/batch.Dockerfile .
-                        docker tag \
-                            "${ECR_REPOSITORY}:latest" \
-                            "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
-                        docker push \
-                            "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
-                    '''
+        stage('Build & Push realtime API') {
+            when {
+                anyOf {
+                    changeset 'PredML/src/**'
+                    changeset 'PredML/docker/api.Dockerfile'
+                    changeset 'PredML/docker/requirements-api.txt'
                 }
+            }
+            steps {
+                bat '''
+                    @echo off
+                    set "ECR_REGISTRY=%AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com"
+
+                    aws ecr get-login-password --region "%AWS_REGION%" | docker login --username AWS --password-stdin "%ECR_REGISTRY%"
+                    if errorlevel 1 exit /b 1
+
+                    docker build -t "%API_REPOSITORY%:latest" -f PredML\\docker\\api.Dockerfile PredML
+                    if errorlevel 1 exit /b 1
+                    docker tag "%API_REPOSITORY%:latest" "%ECR_REGISTRY%/%API_REPOSITORY%:latest"
+                    docker push "%ECR_REGISTRY%/%API_REPOSITORY%:latest"
+                '''
             }
         }
 
@@ -65,12 +93,9 @@ pipeline {
                 }
             }
             steps {
-                sh '''
-                    set -eu
-
-                    aws sagemaker start-pipeline-execution \
-                        --pipeline-name "${TRAINING_PIPELINE}" \
-                        --region "${AWS_REGION}"
+                bat '''
+                    @echo off
+                    aws sagemaker start-pipeline-execution --pipeline-name "%TRAINING_PIPELINE%" --region "%AWS_REGION%"
                 '''
             }
         }
@@ -78,23 +103,20 @@ pipeline {
 
     post {
         always {
-            sh '''
-                set +e
-
-                ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-                docker image rm \
-                    "${ECR_REPOSITORY}:latest" \
-                    "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest" \
-                    >/dev/null 2>&1
-                docker logout "${ECR_REGISTRY}" >/dev/null 2>&1
+            bat '''
+                @echo off
+                set "ECR_REGISTRY=%AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com"
+                docker image rm "%BATCH_REPOSITORY%:latest" "%ECR_REGISTRY%/%BATCH_REPOSITORY%:latest" "%API_REPOSITORY%:latest" "%ECR_REGISTRY%/%API_REPOSITORY%:latest" >nul 2>&1
+                docker logout "%ECR_REGISTRY%" >nul 2>&1
+                exit /b 0
             '''
             deleteDir()
         }
         success {
-            echo 'PredML training pipeline triggered successfully'
+            echo 'PredML image pipeline completed successfully'
         }
         failure {
-            echo 'PredML batch image build or training pipeline trigger failed - check logs'
+            echo 'PredML image build, push, or training pipeline trigger failed - check logs'
         }
     }
 }
