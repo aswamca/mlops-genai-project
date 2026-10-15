@@ -131,7 +131,7 @@ pipeline {
             bat '''
                 @echo off
                 set "ECR_REGISTRY=%AWS_ACCOUNT_ID%.dkr.ecr.%AWS_REGION%.amazonaws.com"
-                docker image rm "%BATCH_REPOSITORY%:latest" "%ECR_REGISTRY%/%BATCH_REPOSITORY%:latest" "%API_REPOSITORY%:latest" "%ECR_REGISTRY%/%API_REPOSITORY%:latest" >nul 2>&1
+                docker image rm "%BATCH_REPOSITORY%:latest" "%API_REPOSITORY%:latest" "%ECR_REGISTRY%/%BATCH_REPOSITORY%:latest" "%ECR_REGISTRY%/%API_REPOSITORY%:latest" >nul 2>&1
                 docker logout "%ECR_REGISTRY%" >nul 2>&1
                 exit /b 0
             '''

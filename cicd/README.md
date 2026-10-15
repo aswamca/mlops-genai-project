@@ -472,8 +472,12 @@ source files copied by the API Dockerfile (`config.py`,
 `mlflow_registry.py`, `07_realtime_inference.py`, or `09_forecast.py`)
 changes. Batch changes also start the configured SageMaker training pipeline.
 
-After the job finishes, its `post` cleanup removes the local Docker image tags,
-logs out of ECR, and deletes the Jenkins workspace. The images remain in ECR.
+After the job finishes, its `post` cleanup removes the Jenkins-created
+`predml-batch:latest` and `predml-api:latest` tags, the temporary
+ECR-qualified tags, logs out of ECR, and deletes the Jenkins workspace. It does
+not remove local development images such as `predml-local/api:latest`,
+`predml-local/batch:latest`, or `predml-local/mlflow:latest`. The pushed images
+remain in ECR.
 
 #### Triggering builds
 
