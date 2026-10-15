@@ -3,7 +3,7 @@
 # Copies requirements-aws.txt plus src/config.py, src/mlflow_registry.py, and
 # src/01_preprocess.py through src/06_batch_inference.py, then
 # src/08_model_monitoring.py through src/10_rollback.py. Raw data is uploaded
-# to S3 separately; datasets/model/database artifacts are not included..
+# to S3 separately; datasets/model/database artifacts are not included....
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
