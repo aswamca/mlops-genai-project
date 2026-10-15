@@ -40,7 +40,18 @@ pipeline {
             // Rebuild the image only when the batch source changes.
             when {
                 anyOf {
-                    changeset 'PredML/AWS/src/**'
+                    changeset 'PredML/AWS/src/config.py'
+                    changeset 'PredML/AWS/src/mlflow_registry.py'
+                    changeset 'PredML/AWS/src/requirements-aws.txt'
+                    changeset 'PredML/AWS/src/01_preprocess.py'
+                    changeset 'PredML/AWS/src/02_feature_engineering.py'
+                    changeset 'PredML/AWS/src/03_feature_store.py'
+                    changeset 'PredML/AWS/src/04_train_model.py'
+                    changeset 'PredML/AWS/src/05_register_model.py'
+                    changeset 'PredML/AWS/src/06_batch_inference.py'
+                    changeset 'PredML/AWS/src/08_model_monitoring.py'
+                    changeset 'PredML/AWS/src/09_forecast.py'
+                    changeset 'PredML/AWS/src/10_rollback.py'
                     changeset 'PredML/docker/batch.Dockerfile'
                 }
             }
@@ -63,7 +74,10 @@ pipeline {
         stage('Build & Push realtime API') {
             when {
                 anyOf {
-                    changeset 'PredML/src/**'
+                    changeset 'PredML/src/config.py'
+                    changeset 'PredML/src/mlflow_registry.py'
+                    changeset 'PredML/src/07_realtime_inference.py'
+                    changeset 'PredML/src/09_forecast.py'
                     changeset 'PredML/docker/api.Dockerfile'
                     changeset 'PredML/docker/requirements-api.txt'
                 }
@@ -88,7 +102,18 @@ pipeline {
             // Trigger only when the image build/push stage ran successfully.
             when {
                 anyOf {
-                    changeset 'PredML/AWS/src/**'
+                    changeset 'PredML/AWS/src/config.py'
+                    changeset 'PredML/AWS/src/mlflow_registry.py'
+                    changeset 'PredML/AWS/src/requirements-aws.txt'
+                    changeset 'PredML/AWS/src/01_preprocess.py'
+                    changeset 'PredML/AWS/src/02_feature_engineering.py'
+                    changeset 'PredML/AWS/src/03_feature_store.py'
+                    changeset 'PredML/AWS/src/04_train_model.py'
+                    changeset 'PredML/AWS/src/05_register_model.py'
+                    changeset 'PredML/AWS/src/06_batch_inference.py'
+                    changeset 'PredML/AWS/src/08_model_monitoring.py'
+                    changeset 'PredML/AWS/src/09_forecast.py'
+                    changeset 'PredML/AWS/src/10_rollback.py'
                     changeset 'PredML/docker/batch.Dockerfile'
                 }
             }

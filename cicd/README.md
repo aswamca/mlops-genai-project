@@ -463,11 +463,14 @@ AWS_SECRET_ACCESS_KEY
 AWS_ACCOUNT_ID
 ```
 
-It builds and pushes the `predml-batch` image to ECR when
-`PredML/AWS/src/**` or the batch Dockerfile changes. It builds and pushes the
-realtime API image to `predml-api` when `PredML/src/**`, the API Dockerfile, or
-the API requirements change. Batch changes also start the configured SageMaker
-training pipeline.
+It builds and pushes the `predml-batch` image to ECR when one of the files
+copied by the batch Dockerfile changes: AWS source stages `01` through `06`,
+`08` through `10`, AWS configuration/MLflow files, the AWS requirements file,
+or the batch Dockerfile. It builds and pushes the realtime API image to
+`predml-api` when the API Dockerfile, API requirements, or one of the API
+source files copied by the API Dockerfile (`config.py`,
+`mlflow_registry.py`, `07_realtime_inference.py`, or `09_forecast.py`)
+changes. Batch changes also start the configured SageMaker training pipeline.
 
 After the job finishes, its `post` cleanup removes the local Docker image tags,
 logs out of ECR, and deletes the Jenkins workspace. The images remain in ECR.
