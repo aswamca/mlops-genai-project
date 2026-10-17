@@ -107,6 +107,7 @@ pipeline {
                     if (!executionArn) {
                         error('SageMaker did not return a training execution ARN')
                     }
+                    echo "Started SageMaker training execution: ${executionArn}"
                     withEnv(["TRAINING_EXECUTION_ARN=${executionArn}"]) {
                         powershell '''
                             $ErrorActionPreference = "Stop"
@@ -121,7 +122,21 @@ pipeline {
                                 Start-Sleep -Seconds 30
                             } while ((Get-Date) -lt $deadline)
                             if ($status -ne "Succeeded") {
-                                Write-Error "Training pipeline ended with status: $status"
+                                Write-Host "Training execution ARN: $env:TRAINING_EXECUTION_ARN"
+                                Write-Host "Training pipeline ended with status: $status"
+                                Write-Host "Pipeline execution details:"
+                                aws sagemaker describe-pipeline-execution `
+                                    --pipeline-execution-arn $env:TRAINING_EXECUTION_ARN `
+                                    --region $env:AWS_REGION `
+                                    --query "{Status:PipelineExecutionStatus,FailureReason:FailureReason,StartTime:CreatedTime,EndTime:LastModifiedTime}" `
+                                    --output table
+                                Write-Host "Failed or stopped steps:"
+                                aws sagemaker list-pipeline-execution-steps `
+                                    --pipeline-execution-arn $env:TRAINING_EXECUTION_ARN `
+                                    --region $env:AWS_REGION `
+                                    --query "PipelineExecutionSteps[?StepStatus=='Failed' || StepStatus=='Stopped'].[StepName,StepStatus,FailureReason]" `
+                                    --output table
+                                Write-Error "Training pipeline ended with status: $status. See the SageMaker failure reason above."
                                 exit 1
                             }
                         '''
