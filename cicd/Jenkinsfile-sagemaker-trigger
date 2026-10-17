@@ -19,7 +19,8 @@ pipeline {
         )
         string(
             name: 'ECR_IMAGE_TAG',
-            description: 'Immutable predml-batch ECR tag published by the image pipeline'
+            defaultValue: 'latest',
+            description: 'Enter only the ECR tag, for example latest or 16. Do not enter ECR_IMAGE_TAG=latest, quotes, or the full image URI.'
         )
         string(
             name: 'TRAINING_PIPELINE',
@@ -58,6 +59,12 @@ pipeline {
                 bat '''
                     @echo off
                     if "%ECR_IMAGE_TAG%"=="" exit /b 2
+                    echo %ECR_IMAGE_TAG%| findstr "=" >nul
+                    if not errorlevel 1 (
+                        echo Invalid ECR_IMAGE_TAG value: [%ECR_IMAGE_TAG%]
+                        echo Enter only the tag, for example latest or 16. Do not use ECR_IMAGE_TAG=latest.
+                        exit /b 2
+                    )
                     echo Checking ECR image tag: [%ECR_IMAGE_TAG%]
                     aws ecr describe-images --repository-name "%BATCH_REPOSITORY%" --image-ids imageTag="%ECR_IMAGE_TAG%" --region "%AWS_REGION%"
                     if errorlevel 1 (
