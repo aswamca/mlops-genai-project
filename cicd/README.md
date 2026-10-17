@@ -371,6 +371,9 @@ file-based MLflow tracking.
 After `apply`, the Terraform job registers or updates the training, batch
 inference, monitoring, and rollback pipelines. The Windows Jenkins node must
 provide Python and `boto3` for this registration step.
+The current Jenkinsfile prepends the existing user-level Python installation
+at `C:\Users\ASWAD\AppData\Local\Python\bin`; install `boto3` into that
+interpreter rather than installing Python system-wide.
 Changes to `PredML/AWS/src` or `PredML/docker/batch.Dockerfile` rebuild and push
 the AWS image.
 

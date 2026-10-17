@@ -10,6 +10,7 @@ pipeline {
         TF_STATE_KEY          = 'predml/terraform.tfstate'
         TF_ROOT               = 'PredML/AWS/terraform'
         TF_CLI_ARGS           = '-no-color'
+        PATH                  = "C:\\Users\\ASWAD\\AppData\\Local\\Python\\bin;C:\\Users\\ASWAD\\AppData\\Local\\Python\\bin\\Scripts;${env.PATH}"
     }
 
     parameters {
