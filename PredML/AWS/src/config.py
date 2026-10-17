@@ -80,7 +80,9 @@ if not MLFLOW_URI:
         "the Terraform output 'mlflow_tracking_server_arn'."
     )
 MLFLOW_EXPERIMENT = os.environ.get("MLFLOW_EXPERIMENT", "pharmacy_cost_forecasting_aws")
-MLFLOW_REGISTERED_MODEL_NAME = os.environ.get("MLFLOW_REGISTERED_MODEL_NAME", "cost_forecaster")
+MLFLOW_REGISTERED_MODEL_NAME = os.environ.get(
+    "MLFLOW_REGISTERED_MODEL_NAME", "cost-forecaster"
+)
 MLFLOW_ARTIFACTS = os.environ.get("MLFLOW_ARTIFACTS", s3_path("mlflow-artifacts"))
 CHAMPION_ALIAS = "champion"
 PREVIOUS_ALIAS = "previous"
