@@ -26,12 +26,14 @@ module "sagemaker" {
   project            = var.project_name
 }
 
-module "eventbridge" {
-  source                   = "./modules/eventbridge"
-  sagemaker_role_arn       = module.iam.eventbridge_role_arn
-  project                  = var.project_name
-  aws_region               = var.aws_region
-  aws_account_id           = data.aws_caller_identity.current.account_id
-  batch_pipeline_name      = var.batch_pipeline_name
-  monitoring_pipeline_name = var.monitoring_pipeline_name
-}
+# EventBridge schedules are intentionally disabled. Inference is started by
+# the champion-promotion Jenkins trigger until scheduled execution is enabled.
+# module "eventbridge" {
+#   source                   = "./modules/eventbridge"
+#   sagemaker_role_arn       = module.iam.eventbridge_role_arn
+#   project                  = var.project_name
+#   aws_region               = var.aws_region
+#   aws_account_id           = data.aws_caller_identity.current.account_id
+#   batch_pipeline_name      = var.batch_pipeline_name
+#   monitoring_pipeline_name = var.monitoring_pipeline_name
+# }

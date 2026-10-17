@@ -7,7 +7,7 @@ This directory is the Terraform root module for the AWS resources described in
 - `ecr`: batch and API container repositories
 - `iam`: SageMaker and EventBridge Scheduler roles
 - `sagemaker`: MLflow tracking server and Feature Store group
-- `eventbridge`: batch inference and monitoring schedules
+- `eventbridge`: batch inference and monitoring schedules (currently disabled)
 
 ## Usage
 
@@ -40,3 +40,7 @@ The local modules under `modules/` are loaded by `terraform init`; no separate
 download or copy step is required. The pipeline runs `terraform init -upgrade`
 and `terraform validate`, then creates and archives a plan. Select `apply` or
 `destroy` only after reviewing the plan and approving the Jenkins prompt.
+The EventBridge module is intentionally commented out in `main.tf`, so
+scheduled batch and monitoring executions are disabled. The promotion-trigger
+Jenkins job starts inference after a new champion is promoted. Uncomment the
+module and run Terraform `apply` when scheduled execution is required.
