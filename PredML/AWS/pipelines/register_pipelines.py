@@ -36,7 +36,7 @@ def _processing_step(
             },
             "AppSpecification": {
                 "ImageUri": image_uri,
-                "Environment": {
+                "Env": {
                     "AWS_DEFAULT_REGION": "",
                     "AWS_REGION": "",
                     "S3_BUCKET": bucket,
@@ -77,7 +77,7 @@ def _pipeline_definition(
         previous = [name]
 
     for step in steps:
-        environment = step["Arguments"]["AppSpecification"]["Environment"]
+        environment = step["Arguments"]["AppSpecification"]["Env"]
         environment["AWS_DEFAULT_REGION"] = region
         environment["AWS_REGION"] = region
     return json.dumps({"Version": "2020-12-01", "Steps": steps})
