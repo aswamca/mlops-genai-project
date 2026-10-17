@@ -1,7 +1,7 @@
 # Realtime prediction and forecast API.
 # Copies requirements-api.txt plus src/config.py, src/mlflow_registry.py,
 # src/07_realtime_inference.py, and src/09_forecast.py. Runtime data and model
-# state are mounted separately and are not baked into the image....
+# state are mounted separately and are not baked into the image.
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

@@ -135,7 +135,7 @@ pipeline {
                         ]) {
                             bat '''
                                 @echo off
-                                python ..\\..\\cicd\\register_sagemaker_pipelines.py ^
+                                python ..\\..\\..\\cicd\\register_sagemaker_pipelines.py ^
                                     --region "%AWS_REGION%" ^
                                     --bucket "%PIPELINE_BUCKET%" ^
                                     --image-uri "%PIPELINE_IMAGE_URI%" ^
