@@ -14,7 +14,6 @@ pipeline {
         AWS_REGION            = 'ap-southeast-2'
         BATCH_REPOSITORY      = 'predml-batch'
         API_REPOSITORY        = 'predml-api'
-        SAGEMAKER_TRIGGER_JOB = 'predml-sagemaker-trigger'
     }
 
     stages {
@@ -101,34 +100,6 @@ pipeline {
             }
         }
 
-        stage('Trigger SageMaker pipeline job') {
-            // The downstream job validates this immutable ECR tag before training.
-            when {
-                anyOf {
-                    changeset 'PredML/AWS/src/config.py'
-                    changeset 'PredML/AWS/src/mlflow_registry.py'
-                    changeset 'PredML/AWS/src/requirements-aws.txt'
-                    changeset 'PredML/AWS/src/01_preprocess.py'
-                    changeset 'PredML/AWS/src/02_feature_engineering.py'
-                    changeset 'PredML/AWS/src/03_feature_store.py'
-                    changeset 'PredML/AWS/src/04_train_model.py'
-                    changeset 'PredML/AWS/src/05_register_model.py'
-                    changeset 'PredML/AWS/src/06_batch_inference.py'
-                    changeset 'PredML/AWS/src/08_model_monitoring.py'
-                    changeset 'PredML/AWS/src/09_forecast.py'
-                    changeset 'PredML/AWS/src/10_rollback.py'
-                    changeset 'PredML/docker/batch.Dockerfile'
-                }
-            }
-            steps {
-                build job: "${env.SAGEMAKER_TRIGGER_JOB}",
-                    wait: true,
-                    propagate: true,
-                    parameters: [
-                        string(name: 'ECR_IMAGE_TAG', value: "${env.BUILD_NUMBER}")
-                    ]
-            }
-        }
     }
 
     post {
@@ -145,7 +116,7 @@ pipeline {
             echo 'PredML image pipeline completed successfully'
         }
         failure {
-            echo 'PredML image build, push, or training pipeline trigger failed - check logs'
+            echo 'PredML image build or push failed - check logs'
         }
     }
 }

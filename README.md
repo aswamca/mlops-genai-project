@@ -178,8 +178,9 @@ or a configured Git webhook. It:
 1. Builds and pushes the `predml-batch` image when AWS batch sources change.
 2. Builds and pushes the realtime API image to `predml-api` when the API sources
    change.
-3. Starts the separate [`cicd/Jenkinsfile-sagemaker-trigger`](./cicd/Jenkinsfile-sagemaker-trigger)
-   job only after the immutable batch ECR tag is pushed successfully.
+3. Pushes the immutable batch image tag for the separately managed
+   [`cicd/Jenkinsfile-sagemaker-trigger`](./cicd/Jenkinsfile-sagemaker-trigger)
+   job to validate and use.
 
 [`cicd/Jenkinsfile-sagemaker-trigger`](./cicd/Jenkinsfile-sagemaker-trigger):
 
