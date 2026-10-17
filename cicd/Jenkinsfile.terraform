@@ -123,15 +123,15 @@ pipeline {
                             script: 'terraform output -raw sagemaker_role_arn',
                             returnStdout: true
                         ).trim().split('\r?\n')[-1]
-                        def trackingUri = bat(
-                            script: 'terraform output -raw mlflow_tracking_uri',
+                        def trackingArn = bat(
+                            script: 'terraform output -raw mlflow_tracking_server_arn',
                             returnStdout: true
                         ).trim().split('\r?\n')[-1]
                         withEnv([
                             "PIPELINE_BUCKET=${bucket}",
                             "PIPELINE_IMAGE_URI=${imageUri}",
                             "PIPELINE_ROLE_ARN=${roleArn}",
-                            "PIPELINE_MLFLOW_URI=${trackingUri}"
+                            "PIPELINE_MLFLOW_URI=${trackingArn}"
                         ]) {
                             bat '''
                                 @echo off

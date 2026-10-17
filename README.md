@@ -201,9 +201,11 @@ to match the AWS stage scripts. A rejected challenger therefore does not
 trigger either inference pipeline.
 
 The SageMaker pipeline definitions must pass the Terraform output
-`mlflow_tracking_uri` to every AWS container as `MLFLOW_TRACKING_URI`. The AWS
-stage code rejects a missing URI, so runs cannot silently use a local MLflow
-store inside a container.
+`mlflow_tracking_server_arn` to every AWS container as `MLFLOW_TRACKING_URI`.
+The AWS `sagemaker-mlflow` plugin uses the tracking-server ARN for SigV4
+authentication; the HTTPS tracking URL alone is not sufficient. The AWS stage
+code rejects a missing URI, so runs cannot silently use a local MLflow store
+inside a container.
 
 The Terraform Jenkins pipeline registers or updates four SageMaker pipelines
 after a successful `apply`: training, batch inference, monitoring, and

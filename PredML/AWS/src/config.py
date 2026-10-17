@@ -77,7 +77,7 @@ MLFLOW_URI = os.environ.get(
 if not MLFLOW_URI:
     raise RuntimeError(
         "MLFLOW_TRACKING_URI is required. Use the tracking server URL from "
-        "the Terraform output 'mlflow_tracking_uri'."
+        "the Terraform output 'mlflow_tracking_server_arn'."
     )
 MLFLOW_EXPERIMENT = os.environ.get("MLFLOW_EXPERIMENT", "pharmacy_cost_forecasting_aws")
 MLFLOW_REGISTERED_MODEL_NAME = os.environ.get("MLFLOW_REGISTERED_MODEL_NAME", "cost_forecaster")

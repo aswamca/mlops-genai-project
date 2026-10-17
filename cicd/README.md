@@ -354,14 +354,16 @@ infrastructure.
 The AWS batch image uses the cloud-specific implementation under
 `PredML/AWS/src`; the local implementation under `PredML/src` is not modified
 or packaged into that image. AWS stages read and write S3 through the
-`S3_BUCKET` and optional `S3_PREFIX` environment variables. The MLflow tracking
-URI must be supplied with `MLFLOW_TRACKING_URI` (or
+`S3_BUCKET` and optional `S3_PREFIX` environment variables. The SageMaker
+MLflow tracking-server ARN must be supplied with `MLFLOW_TRACKING_URI` (or
 `SAGEMAKER_MLFLOW_TRACKING_URI`) when running a training or registry stage.
-Use the Terraform output rather than a local MLflow URL:
+The AWS `sagemaker-mlflow` plugin uses this ARN for SigV4 authentication; an
+HTTPS tracking URL alone is not sufficient. Use the Terraform output rather
+than a local MLflow URL:
 
 ```powershell
 Set-Location .\PredML\AWS\terraform
-$env:MLFLOW_TRACKING_URI = (terraform output -raw mlflow_tracking_uri)
+$env:MLFLOW_TRACKING_URI = (terraform output -raw mlflow_tracking_server_arn)
 ```
 
 The SageMaker training and inference pipeline definitions must pass this same

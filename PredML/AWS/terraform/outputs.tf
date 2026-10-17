@@ -33,6 +33,11 @@ output "mlflow_tracking_uri" {
   value       = module.sagemaker.mlflow_tracking_uri
 }
 
+output "mlflow_tracking_server_arn" {
+  description = "SageMaker MLflow tracking server ARN used by the AWS MLflow plugin."
+  value       = "arn:aws:sagemaker:${var.aws_region}:${data.aws_caller_identity.current.account_id}:mlflow-tracking-server/${var.mlflow_server_name}"
+}
+
 output "feature_group_name" {
   description = "SageMaker Feature Store feature group name."
   value       = module.sagemaker.feature_group_name
