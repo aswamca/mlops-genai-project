@@ -29,7 +29,7 @@ def _processing_step(
         "Arguments": {
             "ProcessingResources": {
                 "ClusterConfig": {
-                    "InstanceType": "ml.m5.xlarge",
+                    "InstanceType": "ml.t3.medium",
                     "InstanceCount": 1,
                     "VolumeSizeInGB": 30,
                 }
