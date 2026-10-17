@@ -218,17 +218,16 @@ environment {
 Create 3 Jenkins pipeline jobs:
 
 Job 1 — predml-training-pipeline
-
 Source: GitHub repo
 Jenkinsfile path: jenkins/Jenkinsfile.training
 Trigger: GitHub webhook + weekly cron 0 0 * * 0
-Job 2 — predml-batch-inference (optional — mainly EventBridge triggered)
 
+Job 2 — predml-batch-inference (optional — mainly EventBridge triggered)
 Source: GitHub repo
 Jenkinsfile path: jenkins/Jenkinsfile.batch
 Trigger: Manual or EventBridge
-Job 3 — predml-api-deploy
 
+Job 3 — predml-api-deploy
 Source: GitHub repo
 Jenkinsfile path: jenkins/Jenkinsfile.api
 Trigger: GitHub webhook (on merge to main)
