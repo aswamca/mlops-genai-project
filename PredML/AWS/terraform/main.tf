@@ -12,9 +12,12 @@ module "ecr" {
 }
 
 module "iam" {
-  source    = "./modules/iam"
-  role_name = var.sagemaker_role_name
-  project   = var.project_name
+  source             = "./modules/iam"
+  role_name          = var.sagemaker_role_name
+  project            = var.project_name
+  aws_region         = var.aws_region
+  aws_account_id     = data.aws_caller_identity.current.account_id
+  mlflow_server_name = var.mlflow_server_name
 }
 
 module "sagemaker" {
