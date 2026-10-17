@@ -58,8 +58,12 @@ pipeline {
                 bat '''
                     @echo off
                     if "%ECR_IMAGE_TAG%"=="" exit /b 2
-                    aws ecr describe-images --repository-name "%BATCH_REPOSITORY%" --image-ids imageTag="%ECR_IMAGE_TAG%" --region "%AWS_REGION%" >nul
-                    if errorlevel 1 exit /b 1
+                    echo Checking ECR image tag: [%ECR_IMAGE_TAG%]
+                    aws ecr describe-images --repository-name "%BATCH_REPOSITORY%" --image-ids imageTag="%ECR_IMAGE_TAG%" --region "%AWS_REGION%"
+                    if errorlevel 1 (
+                        echo ECR image verification failed for tag [%ECR_IMAGE_TAG%].
+                        exit /b 1
+                    )
                 '''
             }
         }
@@ -68,8 +72,16 @@ pipeline {
             steps {
                 bat '''
                     @echo off
-                    aws s3api head-object --bucket "%S3_BUCKET%" --key "%PROMOTION_MARKER_KEY%" --region "%AWS_REGION%" --query ETag --output text >before-marker.txt 2>nul
+                    echo Checking champion marker: s3://%S3_BUCKET%/%PROMOTION_MARKER_KEY%
+                    aws s3api head-object --bucket "%S3_BUCKET%" --key "%PROMOTION_MARKER_KEY%" --region "%AWS_REGION%" --query ETag --output text >before-marker.txt 2>marker-error.txt
+                    if not errorlevel 1 exit /b 0
+                    findstr /i /c:"Not Found" /c:"404" /c:"does not exist" marker-error.txt >nul
                     if errorlevel 1 (
+                        type marker-error.txt
+                        echo Could not read the champion marker because of an AWS error.
+                        exit /b 1
+                    )
+                    (
                         echo MISSING>before-marker.txt
                     )
                 '''
