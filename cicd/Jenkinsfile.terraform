@@ -34,6 +34,7 @@ pipeline {
                     aws sts get-caller-identity --region "%AWS_REGION%" >nul
                     if errorlevel 1 exit /b 1
                     terraform version
+                    python --version
                 '''
             }
         }
@@ -98,6 +99,51 @@ pipeline {
             steps {
                 dir("${env.TF_ROOT}") {
                     bat 'terraform apply -auto-approve tfplan'
+                }
+            }
+        }
+
+        stage('Register SageMaker pipelines') {
+            when {
+                expression { params.TF_ACTION == 'apply' }
+            }
+            steps {
+                dir("${env.TF_ROOT}") {
+                    script {
+                        def bucket = bat(
+                            script: 'terraform output -raw s3_bucket_name',
+                            returnStdout: true
+                        ).trim().split('\r?\n')[-1]
+                        def imageUri = bat(
+                            script: 'terraform output -raw ecr_batch_uri',
+                            returnStdout: true
+                        ).trim().split('\r?\n')[-1]
+                        def roleArn = bat(
+                            script: 'terraform output -raw sagemaker_role_arn',
+                            returnStdout: true
+                        ).trim().split('\r?\n')[-1]
+                        def trackingUri = bat(
+                            script: 'terraform output -raw mlflow_tracking_uri',
+                            returnStdout: true
+                        ).trim().split('\r?\n')[-1]
+                        withEnv([
+                            "PIPELINE_BUCKET=${bucket}",
+                            "PIPELINE_IMAGE_URI=${imageUri}",
+                            "PIPELINE_ROLE_ARN=${roleArn}",
+                            "PIPELINE_MLFLOW_URI=${trackingUri}"
+                        ]) {
+                            bat '''
+                                @echo off
+                                python ..\\..\\cicd\\register_sagemaker_pipelines.py ^
+                                    --region "%AWS_REGION%" ^
+                                    --bucket "%PIPELINE_BUCKET%" ^
+                                    --image-uri "%PIPELINE_IMAGE_URI%" ^
+                                    --role-arn "%PIPELINE_ROLE_ARN%" ^
+                                    --tracking-uri "%PIPELINE_MLFLOW_URI%"
+                                if errorlevel 1 exit /b 1
+                            '''
+                        }
+                    }
                 }
             }
         }

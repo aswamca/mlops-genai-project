@@ -65,6 +65,7 @@ ONLINE_STORE = s3_path("features", "online")
 
 REGISTRY_DIR = s3_path("models", "cost_forecaster")
 PRODUCTION_VERSION_FILE = s3_path("models", "cost_forecaster", "production_version.txt")
+CHAMPION_PROMOTION_FILE = s3_path("models", "cost_forecaster", "champion_promotion.json")
 PREDICTIONS_DIR = s3_path("output", "predictions", "batch")
 BASELINE_DIR = s3_path("monitoring", "baseline")
 REPORTS_DIR = s3_path("monitoring", "reports")
@@ -72,7 +73,12 @@ REPORTS_DIR = s3_path("monitoring", "reports")
 MLFLOW_URI = os.environ.get(
     "MLFLOW_TRACKING_URI",
     os.environ.get("SAGEMAKER_MLFLOW_TRACKING_URI", ""),
-)
+).strip()
+if not MLFLOW_URI:
+    raise RuntimeError(
+        "MLFLOW_TRACKING_URI is required. Use the tracking server URL from "
+        "the Terraform output 'mlflow_tracking_uri'."
+    )
 MLFLOW_EXPERIMENT = os.environ.get("MLFLOW_EXPERIMENT", "pharmacy_cost_forecasting_aws")
 MLFLOW_REGISTERED_MODEL_NAME = os.environ.get("MLFLOW_REGISTERED_MODEL_NAME", "cost_forecaster")
 MLFLOW_ARTIFACTS = os.environ.get("MLFLOW_ARTIFACTS", s3_path("mlflow-artifacts"))

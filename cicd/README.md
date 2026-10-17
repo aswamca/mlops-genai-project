@@ -333,7 +333,8 @@ agent {
   builds and pushes the realtime API image to the API ECR repository, and
   starts the SageMaker training pipeline.
 - [`Jenkinsfile.terraform`](./Jenkinsfile.terraform): validates, plans,
-  applies, or destroys Terraform infrastructure.
+  applies, or destroys Terraform infrastructure, and registers the four
+  SageMaker pipeline definitions after `apply`.
 
 ### Jenkins pipeline setup
 
@@ -356,6 +357,20 @@ or packaged into that image. AWS stages read and write S3 through the
 `S3_BUCKET` and optional `S3_PREFIX` environment variables. The MLflow tracking
 URI must be supplied with `MLFLOW_TRACKING_URI` (or
 `SAGEMAKER_MLFLOW_TRACKING_URI`) when running a training or registry stage.
+Use the Terraform output rather than a local MLflow URL:
+
+```powershell
+Set-Location .\PredML\AWS\terraform
+$env:MLFLOW_TRACKING_URI = (terraform output -raw mlflow_tracking_uri)
+```
+
+The SageMaker training and inference pipeline definitions must pass this same
+URI as `MLFLOW_TRACKING_URI` to the batch and API containers. The AWS stage
+code fails fast if the variable is missing, preventing accidental local
+file-based MLflow tracking.
+After `apply`, the Terraform job registers or updates the training, batch
+inference, monitoring, and rollback pipelines. The Windows Jenkins node must
+provide Python and `boto3` for this registration step.
 Changes to `PredML/AWS/src` or `PredML/docker/batch.Dockerfile` rebuild and push
 the AWS image.
 

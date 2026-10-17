@@ -14,7 +14,7 @@ pipeline {
         AWS_REGION            = 'ap-southeast-2'
         BATCH_REPOSITORY      = 'predml-batch'
         API_REPOSITORY        = 'predml-api'
-        TRAINING_PIPELINE     = 'PredML-Training-Pipeline'
+        SAGEMAKER_TRIGGER_JOB = 'predml-sagemaker-trigger'
     }
 
     stages {
@@ -67,6 +67,9 @@ pipeline {
                     if errorlevel 1 exit /b 1
                     docker tag "%BATCH_REPOSITORY%:latest" "%ECR_REGISTRY%/%BATCH_REPOSITORY%:latest"
                     docker push "%ECR_REGISTRY%/%BATCH_REPOSITORY%:latest"
+                    if errorlevel 1 exit /b 1
+                    docker tag "%BATCH_REPOSITORY%:latest" "%ECR_REGISTRY%/%BATCH_REPOSITORY%:%BUILD_NUMBER%"
+                    docker push "%ECR_REGISTRY%/%BATCH_REPOSITORY%:%BUILD_NUMBER%"
                 '''
             }
         }
@@ -98,8 +101,8 @@ pipeline {
             }
         }
 
-        stage('Trigger Training Pipeline') {
-            // Trigger only when the image build/push stage ran successfully.
+        stage('Trigger SageMaker pipeline job') {
+            // The downstream job validates this immutable ECR tag before training.
             when {
                 anyOf {
                     changeset 'PredML/AWS/src/config.py'
@@ -118,10 +121,12 @@ pipeline {
                 }
             }
             steps {
-                bat '''
-                    @echo off
-                    aws sagemaker start-pipeline-execution --pipeline-name "%TRAINING_PIPELINE%" --region "%AWS_REGION%"
-                '''
+                build job: "${env.SAGEMAKER_TRIGGER_JOB}",
+                    wait: true,
+                    propagate: true,
+                    parameters: [
+                        string(name: 'ECR_IMAGE_TAG', value: "${env.BUILD_NUMBER}")
+                    ]
             }
         }
     }

@@ -1,39 +1,29 @@
+import json
 from datetime import datetime, timezone
 
 from config import (
+    CHAMPION_PROMOTION_FILE,
     CHAMPION_ALIAS,
     MLFLOW_REGISTERED_MODEL_NAME,
     PREVIOUS_ALIAS,
-    REGISTRY_DIR,
     banner,
     ensure_dirs,
-    read_text,
-    s3_exists,
+    write_text,
 )
 from mlflow_registry import (
     get_champion_version,
+    get_latest_challenger_version,
     get_version_metrics,
     promote_to_champion,
     tag_version,
 )
 
 
-CHALLENGER_POINTER = f"{REGISTRY_DIR}/challenger_version.txt"
-
-
 def register_and_evaluate() -> str:
     ensure_dirs()
     banner("STAGE 5 - CHAMPION VS CHALLENGER GATE (MLflow Model Registry)")
 
-    if not s3_exists(CHALLENGER_POINTER):
-        raise FileNotFoundError(
-            f"No challenger pointer at {CHALLENGER_POINTER}. "
-            "Run 04_train_model.py first."
-        )
-
-    challenger_version = read_text(CHALLENGER_POINTER).strip()
-    if not challenger_version:
-        raise ValueError(f"Challenger pointer is empty: {CHALLENGER_POINTER}")
+    challenger_version = get_latest_challenger_version()
 
     challenger_metrics = get_version_metrics(challenger_version)
     if "test_mape" not in challenger_metrics:
@@ -91,6 +81,17 @@ def register_and_evaluate() -> str:
                     "demoted_by": challenger_version,
                 },
             )
+        write_text(
+            CHAMPION_PROMOTION_FILE,
+            json.dumps(
+                {
+                    "model_name": MLFLOW_REGISTERED_MODEL_NAME,
+                    "champion_version": challenger_version,
+                    "previous_version": champion_version,
+                    "promoted_at": promoted_at,
+                }
+            ),
+        )
         print(f"Promoted version {challenger_version} to alias '{CHAMPION_ALIAS}'.")
         if champion_version is not None:
             print(f"Previous champion {champion_version} now has alias '{PREVIOUS_ALIAS}'.")

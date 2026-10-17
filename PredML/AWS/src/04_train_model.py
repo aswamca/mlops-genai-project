@@ -13,13 +13,11 @@ from config import (
     MLFLOW_REGISTERED_MODEL_NAME,
     MLFLOW_URI,
     OFFLINE_FILE,
-    REGISTRY_DIR,
     TARGET_COLUMN,
     TEST_DAYS,
     XGBOOST_PARAMS,
     banner,
     ensure_dirs,
-    write_text,
 )
 
 
@@ -122,9 +120,6 @@ def train() -> dict:
                 value,
             )
 
-        challenger_pointer = f"{REGISTRY_DIR}/challenger_version.txt"
-        write_text(challenger_pointer, str(model_version.version))
-
         print("\nMetrics:")
         for name, value in metrics.items():
             print(f"  {name}: {value:.4f}")
@@ -132,7 +127,6 @@ def train() -> dict:
             f"\nRegistered {MLFLOW_REGISTERED_MODEL_NAME} version "
             f"{model_version.version} (challenger)"
         )
-        print(f"Challenger version pointer: {challenger_pointer}")
         print(f"MLflow run ID: {run.info.run_id}")
         print(f"MLflow tracking URI: {MLFLOW_URI}")
 

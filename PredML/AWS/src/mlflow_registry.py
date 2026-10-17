@@ -66,6 +66,25 @@ def get_version_metrics(version: str) -> dict[str, float]:
     return metrics
 
 
+def get_latest_challenger_version() -> str:
+    """Return the newest registered challenger version from MLflow."""
+    client = _client()
+    versions = client.search_model_versions(
+        f"name='{MLFLOW_REGISTERED_MODEL_NAME}'"
+    )
+    challengers = [
+        version
+        for version in versions
+        if version.tags.get("role") == "challenger"
+    ]
+    if not challengers:
+        raise RuntimeError(
+            f"No challenger version found for '{MLFLOW_REGISTERED_MODEL_NAME}'. "
+            "Run the training stage first."
+        )
+    return str(max(challengers, key=lambda version: int(version.version)).version)
+
+
 def get_champion_version() -> str | None:
     """Return the version currently assigned to the champion alias."""
     client = _client()

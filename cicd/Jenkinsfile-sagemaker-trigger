@@ -1,0 +1,161 @@
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+    }
+
+    parameters {
+        string(
+            name: 'S3_BUCKET',
+            defaultValue: 'predml-data-ap-southeast-2',
+            description: 'S3 bucket used by the AWS stage scripts'
+        )
+        string(
+            name: 'PROMOTION_MARKER_KEY',
+            defaultValue: 'models/cost_forecaster/champion_promotion.json',
+            description: 'S3 key written only when the champion alias is promoted'
+        )
+        string(
+            name: 'ECR_IMAGE_TAG',
+            description: 'Immutable predml-batch ECR tag published by the image pipeline'
+        )
+        string(
+            name: 'TRAINING_PIPELINE',
+            defaultValue: 'PredML-Training-Pipeline',
+            description: 'SageMaker training pipeline name'
+        )
+        string(
+            name: 'BATCH_PIPELINE',
+            defaultValue: 'PredML-Batch-Inference-Pipeline',
+            description: 'SageMaker batch inference pipeline name'
+        )
+        string(
+            name: 'REALTIME_PIPELINE',
+            defaultValue: 'PredML-Realtime-Inference-Pipeline',
+            description: 'SageMaker realtime inference/deployment pipeline name'
+        )
+    }
+
+    environment {
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        AWS_ACCOUNT_ID        = credentials('AWS_ACCOUNT_ID')
+        AWS_REGION            = 'ap-southeast-2'
+        BATCH_REPOSITORY      = 'predml-batch'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Verify training image') {
+            steps {
+                bat '''
+                    @echo off
+                    if "%ECR_IMAGE_TAG%"=="" exit /b 2
+                    aws ecr describe-images --repository-name "%BATCH_REPOSITORY%" --image-ids imageTag="%ECR_IMAGE_TAG%" --region "%AWS_REGION%" >nul
+                    if errorlevel 1 exit /b 1
+                '''
+            }
+        }
+
+        stage('Read current champion marker') {
+            steps {
+                bat '''
+                    @echo off
+                    aws s3api head-object --bucket "%S3_BUCKET%" --key "%PROMOTION_MARKER_KEY%" --region "%AWS_REGION%" --query ETag --output text >before-marker.txt 2>nul
+                    if errorlevel 1 (
+                        echo MISSING>before-marker.txt
+                    )
+                '''
+            }
+        }
+
+        stage('Run training and await promotion') {
+            steps {
+                script {
+                    bat """
+                        @echo off
+                        aws sagemaker start-pipeline-execution --pipeline-name "%TRAINING_PIPELINE%" --region "%AWS_REGION%" --query PipelineExecutionArn --output text >training-execution-arn.txt
+                        if errorlevel 1 exit /b 1
+                    """
+                    def executionArn = readFile('training-execution-arn.txt').trim()
+                    if (!executionArn) {
+                        error('SageMaker did not return a training execution ARN')
+                    }
+                    withEnv(["TRAINING_EXECUTION_ARN=${executionArn}"]) {
+                        powershell '''
+                            $ErrorActionPreference = "Stop"
+                            $deadline = (Get-Date).AddHours(6)
+                            do {
+                                $status = aws sagemaker describe-pipeline-execution `
+                                    --pipeline-execution-arn $env:TRAINING_EXECUTION_ARN `
+                                    --region $env:AWS_REGION `
+                                    --query PipelineExecutionStatus --output text
+                                if ($LASTEXITCODE -ne 0) { exit 1 }
+                                if ($status -in @("Succeeded", "Failed", "Stopped", "Stopping")) { break }
+                                Start-Sleep -Seconds 30
+                            } while ((Get-Date) -lt $deadline)
+                            if ($status -ne "Succeeded") {
+                                Write-Error "Training pipeline ended with status: $status"
+                                exit 1
+                            }
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Require champion promotion') {
+            steps {
+                bat '''
+                    @echo off
+                    aws s3api head-object --bucket "%S3_BUCKET%" --key "%PROMOTION_MARKER_KEY%" --region "%AWS_REGION%" --query ETag --output text >after-marker.txt 2>nul
+                    if errorlevel 1 exit /b 1
+                    findstr /x /c:"MISSING" before-marker.txt >nul
+                    if not errorlevel 1 (
+                        echo First training run: accepting the newly created champion marker.
+                        exit /b 0
+                    )
+                    fc /b before-marker.txt after-marker.txt >nul
+                    if not errorlevel 1 (
+                        echo Training completed without a new champion promotion.
+                        exit /b 1
+                    )
+                '''
+            }
+        }
+
+        stage('Trigger inference pipelines') {
+            parallel {
+                stage('Batch inference') {
+                    steps {
+                        bat 'aws sagemaker start-pipeline-execution --pipeline-name "%BATCH_PIPELINE%" --region "%AWS_REGION%"'
+                    }
+                }
+                stage('Realtime inference') {
+                    steps {
+                        bat 'aws sagemaker start-pipeline-execution --pipeline-name "%REALTIME_PIPELINE%" --region "%AWS_REGION%"'
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            deleteDir()
+        }
+        success {
+            echo 'Champion promotion completed; batch and realtime inference pipelines were triggered.'
+        }
+        failure {
+            echo 'SageMaker trigger stopped before inference because an upstream dependency failed.'
+        }
+    }
+}
