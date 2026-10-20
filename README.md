@@ -455,6 +455,72 @@ application only loads the champion during startup. Then repeat the health
 check and confirm that all ready pods report the new model version. Keep the
 old image tag available for a quick Deployment rollback.
 
+### FastAPI versus a SageMaker real-time endpoint
+
+Enterprise systems commonly use FastAPI and SageMaker together, but they
+serve different purposes. SageMaker is typically used for training,
+processing, model registration, and optionally managed model hosting.
+FastAPI is typically used for the application API, request validation,
+authentication, business logic, and orchestration of several backend
+services.
+
+This project currently uses the following architecture:
+
+```text
+SageMaker Pipelines
+  └── training and batch processing
+
+SageMaker MLflow Tracking Server
+  └── model registry and champion alias
+
+FastAPI on EKS
+  └── realtime prediction and forecasting API
+
+ALB + Route 53
+  └── external access for the GUI and API
+```
+
+There is no SageMaker real-time inference endpoint in this design. The
+FastAPI application loads the model assigned to the MLflow `champion` alias
+and performs inference inside the EKS pod. The GUI calls the FastAPI
+endpoints through the ALB.
+
+A SageMaker real-time endpoint is an alternative, not a requirement. A
+different enterprise architecture could use FastAPI as an application layer
+and SageMaker as the managed model-serving layer:
+
+```text
+GUI
+  |
+  v
+ALB / API layer
+  |
+  v
+FastAPI on EKS
+  |
+  v
+SageMaker real-time endpoint
+  |
+  v
+Model
+```
+
+That alternative is useful when model hosting, model autoscaling, canary
+deployments, shadow testing, or independent scaling need to be managed by
+SageMaker. It also separates application/API scaling from model-serving
+scaling. The current EKS design is suitable when the API contains substantial
+business logic, multiple endpoints, custom validation, or other integrations,
+and the team wants Kubernetes to manage the complete inference service.
+
+For this project, keep SageMaker Pipelines for training and batch processing,
+MLflow for model registration and champion promotion, and FastAPI on EKS for
+the GUI-facing realtime API. Introduce a SageMaker real-time endpoint later
+only if managed model hosting or independent model-serving scale becomes a
+specific requirement. The Jenkins parameter named
+`PredML-Realtime-Inference-Pipeline` should not be interpreted as a
+SageMaker hosted endpoint; the current realtime serving target is the FastAPI
+application deployed on EKS.
+
 The monitoring and rollback pipelines are separate from this promotion flow.
 Monitoring can be run against the generated data and rollback is an explicit
 operation; neither is automatically started by the trigger job.
