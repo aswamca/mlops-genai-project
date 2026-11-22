@@ -253,6 +253,19 @@ inference. If training fails, stops, or times out, the job stops before
 inference. If a new champion was promoted, batch and realtime inference are
 started in parallel.
 
+Promoting a model directly in the MLflow UI does not automatically start the
+batch inference pipeline. The current trigger is Jenkins, not an MLflow
+webhook. The trigger job must be run after the promotion, and the promotion
+marker at `models/cost_forecaster/champion_promotion.json` must change. The
+marker is written by `05_register_model.py` during the normal training flow;
+an alias change made manually in the MLflow UI does not write this marker.
+The current trigger job is a training-and-gate job, not a post-promotion
+listener; starting it will start another training execution. Therefore, for a
+manually promoted model, start the batch inference SageMaker pipeline
+manually from the AWS Console. If the EKS API loads the champion only during
+startup, perform a rolling restart after the promotion so realtime pods load
+the new model version.
+
 ### Why MLflow is required for batch inference
 
 Batch inference does not load an arbitrary model file from a fixed S3 path.
