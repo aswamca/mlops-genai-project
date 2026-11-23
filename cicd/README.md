@@ -501,11 +501,20 @@ remove unused images and layers manually if Docker disk usage grows.
 
 #### Triggering builds
 
-Use manual **Build with Parameters** or **Build Now** for the first runs.
-GitHub cannot normally send a webhook to `http://localhost:8081`; a webhook
-requires a secure, reachable HTTPS endpoint. SCM polling can be configured
-later if required, but manual runs are recommended until the pipelines have
-been verified.
+`Jenkinsfile-batch` uses `githubPush()` so a GitHub push event can trigger
+`PredML-Images`. Manual **Build with Parameters** or **Build Now** remains
+available for testing or for AWS deployments that need a manual run.
+
+GitHub cannot normally send a webhook directly to `http://localhost:8081`.
+Jenkins must be reachable through a public HTTPS endpoint, or the repository
+must use SCM polling. For webhook delivery:
+
+1. Install or confirm the Jenkins **GitHub** plugin.
+2. Expose Jenkins through a secure tunnel or reverse proxy.
+3. Add `https://<jenkins-public-url>/github-webhook/` as a GitHub push webhook.
+4. Enable **GitHub hook trigger for GITScm polling** on `PredML-Images`.
+
+Use the Webhook **Recent Deliveries** page in GitHub to verify push delivery.
 
 Both Jenkinsfiles use the Jenkins built-in Windows node with:
 

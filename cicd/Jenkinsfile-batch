@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     triggers {
-        // Run every Sunday at midnight.
-        cron('0 0 * * 0')
-        // Git push triggering is configured through the Jenkins webhook.
+        // Trigger this job when GitHub sends a push-event webhook.
+        // Configure the Jenkins GitHub webhook at: /github-webhook/
+        githubPush()
     }
 
     environment {

@@ -90,7 +90,7 @@ TEST_DAYS = 60
 XGBOOST_PARAMS = {
     "learning_rate": 0.02,
     "max_depth": 5,
-    "subsample": 0.90,
+    "subsample": 0.85,
     "colsample_bytree": 0.85,
     "n_estimators": 2000,
     "colsample_bylevel": 0.85,
