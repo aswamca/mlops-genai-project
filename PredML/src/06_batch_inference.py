@@ -7,6 +7,7 @@ import pandas as pd
 from config import (
     FEATURE_COLUMNS,
     MLFLOW_REGISTERED_MODEL_NAME,
+    MLFLOW_URI,
     OFFLINE_FILE,
     PREDICTIONS_DIR,
     TARGET_COLUMN,
@@ -19,6 +20,7 @@ from mlflow_registry import load_champion_model
 
 def load_production_model():
     """Load the champion model and its feature contract from MLflow."""
+    mlflow.set_tracking_uri(MLFLOW_URI)
     model_version = load_champion_model()
     feature_columns = json.loads(model_version.tags.get("feature_columns", "[]"))
     if not feature_columns:

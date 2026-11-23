@@ -81,10 +81,15 @@ def generate_raw_data():
 
     df = pd.DataFrame(data)
 
-    # Inject realistic data-quality issues: ~ 0.5% missing values and outliers
+    # Inject realistic data-quality issues for the preprocessing demo.
     n = len(df)
-    missing_indices = rng.choice(n, size=int(0.005 * n), replace=False)
-    df.loc[missing_indices, "sales"] = np.nan
+    missing_sales_indices = rng.choice(n, size=int(0.005 * n), replace=False)
+    df.loc[missing_sales_indices, "sales"] = np.nan
+
+    # actual_cost is the training target. Missing values must be reported to
+    # Ops by preprocessing instead of being imputed.
+    missing_cost_indices = rng.choice(n, size=int(0.005 * n), replace=False)
+    df.loc[missing_cost_indices, "actual_cost"] = np.nan
 
     outlier_indices = rng.choice(n, size=int(0.001 * n), replace=False)
     df.loc[outlier_indices, "actual_cost"] *= 15
@@ -95,10 +100,20 @@ def generate_raw_data():
     print(f"Total rows generated: {len(df)}")
     print(f" Data range: {df['date'].min()} to {df['date'].max()}")
     print(f" Products: {df['product_id'].nunique()} | Regions: {len(REGIONS)}")
-    print(f" Missing sales values: {df['sales'].isna().sum()} | Outliers in actual_cost: {len(outlier_indices)}")
+    print(
+        f" Missing sales values: {df['sales'].isna().sum()} | "
+        f"Missing actual cost values: {df['actual_cost'].isna().sum()} | "
+        f"Outliers in actual_cost: {len(outlier_indices)}"
+    )
     print(f" Sample data:\n{df.head(5)}\n")
-    print(f"Records with missing sales ({len(missing_indices)}):")
-    print(df.loc[missing_indices].sort_index().head(5).to_string(index=False))
+    print(f"Records with missing sales ({len(missing_sales_indices)}):")
+    print(
+        df.loc[missing_sales_indices].sort_index().head(5).to_string(index=False)
+    )
+    print(f"\nRecords with missing actual_cost ({len(missing_cost_indices)}):")
+    print(
+        df.loc[missing_cost_indices].sort_index().head(5).to_string(index=False)
+    )
     print(f"\nRecords with outlier actual_cost ({len(outlier_indices)}):")
     print(df.loc[outlier_indices].sort_index().head(5).to_string(index=False))
 

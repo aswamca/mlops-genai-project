@@ -28,11 +28,12 @@ REPORTS_DIR = BASE_DIR / "monitoring" / "reports"
 MLFLOW_DIR = BASE_DIR / "mlruns"
 MLFLOW_DB = MLFLOW_DIR / "mlruns.db"
 
-# MLFLOW_TRACKING_URI env var wins when set (docker compose set it to http://mlflow:5000).
-# this let conatiner talk to the mlflow server container. When running locally, we use sqlite db file.
+# MLFLOW_TRACKING_URI env var wins when set (Docker Compose uses http://mlflow:5000).
+# Local scripts default to the MLflow server because registered model artifact URIs
+# must resolve through the same HTTP tracking server.
 
 import os as _os
-MLFLOW_URI = _os.environ.get("MLFLOW_TRACKING_URI") or f"sqlite:///{MLFLOW_DB.as_posix()}"
+MLFLOW_URI = _os.environ.get("MLFLOW_TRACKING_URI") or "http://127.0.0.1:5000"
 
 MLFLOW_ARTIFACTS= "mlflow-artifacts:/" if MLFLOW_URI.startswith("http") else f"file:///{(MLFLOW_DIR / 'artifacts').as_posix()}"
 MLFLOW_EXPERIMENT = _os.environ.get(
@@ -47,6 +48,7 @@ PREVIOUS_ALIAS = "previous"
 # FILE NAMES
 RAW_FILE = RAW_DIR / "raw_data_pharma_transactions.csv"
 PROCESSED_FILE = PROCESSED_DIR / "transactions_clean.parquet"
+OPS_REVIEW_FILE = PROCESSED_DIR / "ops_data_quality_review.csv"
 OFFLINE_FILE = OFFLINE_STORE / "features.parquet"
 ONLINE_FILE = ONLINE_STORE / "latestr_features.json"
 
@@ -87,14 +89,14 @@ TEST_DAYS = 60
 
 XGBOOST_PARAMS = {
     "learning_rate": 0.02,
-    "max_depth": 6,
-    "subsample": 0.85,
+    "max_depth": 5,
+    "subsample": 0.90,
     "colsample_bytree": 0.85,
     "n_estimators": 2000,
     "colsample_bylevel": 0.85,
-    "min_child_weight": 3,
-    "reg_alpha": 0.3,
-    "reg_lambda": 2.5,
+    "min_child_weight": 2,
+    "reg_alpha": 0.1,
+    "reg_lambda": 1.5,
     "gamma": 0.1,
     "random_state": 7,
     "n_jobs": -1,

@@ -69,7 +69,7 @@ cicd/
 
 ## Prerequisites
 
-- Python 3.11 or newer
+- Python 3.12 recommended for the local environment
 - Docker, when running containers
 - AWS CLI, when using AWS resources
 - Terraform, when deploying infrastructure
@@ -79,62 +79,248 @@ AWS deployment requires permissions for the services used by the Terraform
 modules. Configure AWS credentials through your local AWS profile or Jenkins
 credentials; never store access keys in this repository.
 
-## Local setup
+## Local setup - run in order
 
-Create a virtual environment from the repository root:
+Use the existing Python 3.12 environment because it is compatible with the pinned MLflow and data-science packages.
 
-```powershell
-python -m venv .venv
-```
+### 1. Activate the existing `.venvpython312` environment
 
-Activate it in Windows PowerShell:
+From the repository root:
 
 ```powershell
+cd E:\Projects\mlops-genai-project
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-. .\.venv\Scripts\Activate.ps1
-```
-
-The execution-policy change applies only to the current PowerShell process.
-It does not change the machine or user execution policy.
-
-Install the project dependencies:
-
-```powershell
+. .\.venvpython312\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+python -c "import sys, mlflow; print(sys.version); print('MLflow', mlflow.__version__)"
 ```
 
-Run the local data-generation script from the `PredML` directory when needed:
+The expected Python version is `3.12.x` and the expected MLflow version is `3.18.0`. Do not create or use `.venv` for this run unless you also install Python 3.12 dependencies there.
+
+### 2. Start MLflow
+
+Open one terminal, activate the environment, and keep this terminal running:
 
 ```powershell
-Set-Location .\PredML
+cd E:\Projects\mlops-genai-project
+. .\.venvpython312\Scripts\Activate.ps1
+python -m mlflow server `
+  --backend-store-uri "sqlite:///E:/Projects/mlops-genai-project/PredML/mlruns/mlruns.db" `
+  --default-artifact-root "mlflow-artifacts:/" `
+  --artifacts-destination "file:///E:/Projects/mlops-genai-project/PredML/mlruns/artifacts" `
+  --serve-artifacts `
+  --host 127.0.0.1 `
+  --port 5000
+```
+
+Do not use `mlflow.exe` if Windows Application Control blocks the launcher. Use `python -m mlflow` instead.
+
+Open the MLflow UI:
+
+```text
+http://127.0.0.1:5000
+```
+
+### 3. Run the complete training pipeline
+
+Open a second terminal:
+
+```powershell
+cd E:\Projects\mlops-genai-project
+. .\.venvpython312\Scripts\Activate.ps1
+$env:MLFLOW_TRACKING_URI = "http://127.0.0.1:5000"
+cd .\PredML\src
+
+python 00_generate_raw_data.py
+python 01_preprocess.py
+python 02_feature_engineering.py
+python 03_feature_store.py
+python 04_train_model.py
+python 05_register_model.py
+```
+
+Stage explanations:
+
+1. `00_generate_raw_data.py` creates the demo source data and intentionally injects missing values for testing.
+2. `01_preprocess.py` cleans missing and outlier values.
+3. `02_feature_engineering.py` creates sales, cost, time and lag features.
+4. `03_feature_store.py` writes offline and online feature files.
+5. `04_train_model.py` trains and registers an XGBoost challenger.
+6. `05_register_model.py` compares test MAPE and promotes or rejects the challenger.
+
+Lower test MAPE is better. A challenger is promoted only when it is lower than the current champion. A missing champion makes the first registered model the champion.
+
+### 4. Run batch inference
+
+From the same pipeline terminal:
+
+```powershell
+python 06_batch_inference.py
+```
+
+Check the generated CSV under:
+
+```text
+PredML/predictions/batch/
+```
+
+### 5. Start the realtime API
+
+Keep MLflow running, open a third terminal, and run:
+
+```powershell
+cd E:\Projects\mlops-genai-project
+. .\.venvpython312\Scripts\Activate.ps1
+$env:MLFLOW_TRACKING_URI = "http://127.0.0.1:5000"
+cd .\PredML
+python .\src\07_realtime_inference.py
+```
+
+Open Swagger UI:
+
+```text
+http://localhost:8000/docs
+```
+
+Use `GET /health` and `POST /predict` for a basic UI test:
+
+```json
+{
+  "product_id": "PRD001",
+  "region": "NA",
+  "sales": 190000
+}
+```
+
+Other useful URLs:
+
+```text
+http://localhost:8000/
+http://localhost:8000/health
+http://localhost:8000/redoc
+http://localhost:8000/openapi.json
+```
+
+### 6. Optional monitoring and rollback
+
+```powershell
+python 08_model_monitoring.py baseline
+python 08_model_monitoring.py monitor
+python 10_rollback.py --list
+python 10_rollback.py --to-version 4
+```
+
+Replace `4` with an existing registered MLflow version for rollback testing.
+
+## Docker setup - run in order
+
+The Docker Compose configuration is at [`PredML/docker/docker-compose.yml`](./PredML/docker/docker-compose.yml). Docker provides an isolated local MLflow server, API container and batch-job container.
+
+Run all commands from the `PredML` directory.
+
+### 1. Generate raw data locally
+
+Docker intentionally does not generate the raw CSV. Create it with the Python environment:
+
+```powershell
+cd E:\Projects\mlops-genai-project
+. .\.venvpython312\Scripts\Activate.ps1
+cd .\PredML
 python .\src\00_generate_raw_data.py
 ```
 
-## Docker
+Confirm the source file exists:
 
-Build the batch image from the repository root:
-
-```powershell
-docker build -t predml-batch:latest -f .\PredML\docker\batch.Dockerfile .\PredML
+```text
+PredML/data/01_raw/raw_data_pharma_transactions.csv
 ```
 
-Run a training stage:
+### 2. Build and start MLflow and the API
 
 ```powershell
-docker run --rm `
-  -e STAGE=04_train_model `
-  predml-batch:latest
+cd E:\Projects\mlops-genai-project\PredML
+docker compose -f .\docker\docker-compose.yml build
+docker compose -f .\docker\docker-compose.yml up -d mlflow api
+docker compose -f .\docker\docker-compose.yml ps
 ```
 
-Build the real-time API image:
+Open:
+
+```text
+MLflow: http://localhost:5000
+API: http://localhost:8000
+Swagger: http://localhost:8000/docs
+```
+
+### 3. Run training stages in sequence
+
+Run each stage with the `STAGE` environment variable:
 
 ```powershell
-docker build -t predml-api:latest -f .\PredML\docker\api.Dockerfile .\PredML
+docker compose -f .\docker\docker-compose.yml run --rm -e STAGE=01_preprocess batch
+docker compose -f .\docker\docker-compose.yml run --rm -e STAGE=02_feature_engineering batch
+docker compose -f .\docker\docker-compose.yml run --rm -e STAGE=03_feature_store batch
+docker compose -f .\docker\docker-compose.yml run --rm -e STAGE=04_train_model batch
+docker compose -f .\docker\docker-compose.yml run --rm -e STAGE=05_register_model batch
 ```
 
-The Docker Compose configuration is available at
-[`PredML/docker/docker-compose.yml`](./PredML/docker/docker-compose.yml).
+Do not skip preprocessing or feature-store stages. Training reads the offline feature parquet created by stage 3.
+
+### 4. Run batch inference
+
+```powershell
+docker compose -f .\docker\docker-compose.yml run --rm -e STAGE=06_batch_inference batch
+```
+
+Results are written to:
+
+```text
+PredML/predictions/batch/
+```
+
+### 5. Test the Docker API
+
+Open Swagger:
+
+```text
+http://localhost:8000/docs
+```
+
+Then test:
+
+- `GET /health`
+- `POST /predict` with `PRD001`, `NA`, and sales `190000`
+- `POST /forecast` using valid start/end dates
+
+PowerShell health check:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri http://localhost:8000/health
+```
+
+PowerShell prediction check:
+
+```powershell
+$body = @{ product_id='PRD001'; region='NA'; sales=190000 } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/predict -ContentType 'application/json' -Body $body
+```
+
+### 6. Stop Docker
+
+Stop the API and MLflow containers:
+
+```powershell
+docker compose -f .\docker\docker-compose.yml stop api mlflow
+```
+
+Remove containers and the Compose network:
+
+```powershell
+docker compose -f .\docker\docker-compose.yml down
+```
+
+Data, MLflow metadata and predictions remain on the host because the Compose file mounts `data`, `mlruns`, `model`, `predictions` and `monitoring`.
 
 ## AWS infrastructure
 
@@ -170,35 +356,154 @@ The S3 state bucket configured in
 normal `terraform init`. See [`PredML/AWS/Setup.txt`](./PredML/AWS/Setup.txt)
 for the broader AWS setup and service workflow.
 
-## CI/CD
+## Jenkins, SageMaker and AWS deployment - run in order
 
-[`cicd/Jenkinsfile-batch`](./cicd/Jenkinsfile-batch) runs on a weekly schedule
-or a configured Git webhook. It:
+This section starts after AWS infrastructure has been created by Terraform.
 
-1. Builds and pushes the `predml-batch` image when AWS batch sources change.
-2. Builds and pushes the realtime API image to `predml-api` when the API sources
-   change.
-3. Pushes the immutable batch image tag for the separately managed
-   [`cicd/Jenkinsfile-sagemaker-trigger`](./cicd/Jenkinsfile-sagemaker-trigger)
-   job to validate and use.
+### 1. Open Jenkins and complete the initial login
 
-[`cicd/Jenkinsfile-sagemaker-trigger`](./cicd/Jenkinsfile-sagemaker-trigger):
+Jenkins is installed locally as a Windows service. Open it in a browser:
 
-1. Verifies the training image tag exists in ECR.
-2. Starts `PredML-Training-Pipeline` and waits for it to finish.
-3. Requires a new `models/cost_forecaster/champion_promotion.json` marker,
-   written by `05_register_model.py` only when the champion alias is promoted.
-4. Starts the batch and realtime inference SageMaker pipelines in parallel.
+```text
+http://localhost:8081
+```
 
-On the first training run, no marker exists yet; the first registered model is
-promoted to champion by design, and the newly created marker is accepted. On
-later runs, the marker must change, so a challenger that does not beat the
-current champion will not trigger inference.
+If Jenkins is using a different port, open the Jenkins Windows service configuration or check the Jenkins URL shown in the setup wizard. This project’s confirmed local listener is port `8081`, not the default `8080`.
 
-Configure the trigger job as a separate Jenkins Pipeline job. Set its
-`S3_BUCKET` and, when using an `S3_PREFIX`, `PROMOTION_MARKER_KEY` parameters
-to match the AWS stage scripts. A rejected challenger therefore does not
-trigger either inference pipeline.
+When Jenkins opens the setup wizard, read the initial administrator password:
+
+```powershell
+Get-Content "C:\ProgramData\Jenkins\.jenkins\secrets\initialAdminPassword"
+```
+
+Then:
+
+1. Enter the initial administrator password.
+2. Select **Install suggested plugins**.
+3. Create a Jenkins administrator username and password.
+4. Confirm the Jenkins URL as:
+
+```text
+http://localhost:8081/
+```
+
+A normal Jenkins user login is then:
+
+```text
+http://localhost:8081/login
+```
+
+### 2. Configure Jenkins credentials
+
+Create these Jenkins credentials:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_ACCOUNT_ID`
+
+Use IAM roles or Jenkins credentials rather than committing AWS keys to Git.
+
+### 3. Create Jenkins jobs
+
+Create three Pipeline jobs:
+
+1. `PredML-Terraform` using [`cicd/Jenkinsfile.terraform`](./cicd/Jenkinsfile.terraform).
+2. `PredML-Images` using [`cicd/Jenkinsfile-batch`](./cicd/Jenkinsfile-batch).
+3. `PredML-SageMaker-Trigger` using [`cicd/Jenkinsfile-sagemaker-trigger`](./cicd/Jenkinsfile-sagemaker-trigger).
+
+### 4. Create AWS infrastructure
+
+Run `PredML-Terraform` with `TF_ACTION=plan`, review the plan, then run it with `TF_ACTION=apply`.
+
+Confirm that Terraform created:
+
+- S3 bucket
+- SageMaker MLflow server
+- SageMaker Feature Store resources
+- ECR batch and API repositories
+- Required IAM roles
+
+### 5. Register SageMaker pipelines
+
+From the repository root:
+
+```powershell
+python .\cicd\register_sagemaker_pipelines.py
+```
+
+The pipeline registration script creates the training and inference pipelines used by Jenkins.
+
+### 6. Build and push images
+
+Run `PredML-Images` in Jenkins. It builds and pushes:
+
+- `predml-batch:<build-number>`
+- `predml-batch:latest`
+- `predml-api:latest`
+
+When running the SageMaker trigger manually, enter only the immutable batch image tag, such as `16`, in `ECR_IMAGE_TAG`. Do not enter a full image URI or `ECR_IMAGE_TAG=16`.
+
+### 7. Run SageMaker training and promotion gate
+
+Run `PredML-SageMaker-Trigger` with:
+
+```text
+S3_BUCKET=<terraform bucket>
+PROMOTION_MARKER_KEY=models/cost_forecaster/champion_promotion.json
+ECR_IMAGE_TAG=<immutable build number>
+TRAINING_PIPELINE=PredML-Training-Pipeline
+BATCH_PIPELINE=PredML-Batch-Inference-Pipeline
+REALTIME_PIPELINE=PredML-Realtime-Inference-Pipeline
+```
+
+The Jenkins job:
+
+1. Verifies the batch image in ECR.
+2. Records the previous promotion marker.
+3. Starts the SageMaker training pipeline.
+4. Waits for success or reports SageMaker step failures.
+5. Checks whether the promotion marker changed.
+6. Starts batch and realtime inference only after a champion promotion.
+
+The first registered model is promoted automatically. Later challengers are promoted only when their test MAPE is lower than the current champion.
+
+### 8. Verify SageMaker results
+
+Check in AWS:
+
+- SageMaker > Pipelines for training and inference execution status
+- MLflow for registered versions and `champion`/`previous` aliases
+- S3 `processed/`, `features/`, `output/predictions/batch/` and `models/cost_forecaster/` prefixes
+- CloudWatch logs for pipeline and container failures
+
+### 9. UI and API testing
+
+After the realtime inference pipeline is deployed or the EKS API is restarted:
+
+```text
+https://<your-route53-name>/health
+https://<your-route53-name>/docs
+```
+
+Use `POST /predict` with:
+
+```json
+{
+  "product_id": "PRD001",
+  "region": "NA",
+  "sales": 190000
+}
+```
+
+Confirm the response includes:
+
+- `predicted_cost`
+- `model_version`
+- `confidence`
+- `feature_as_of`
+- `feature_source`
+
+A rejected challenger does not change the champion marker and does not start batch or realtime inference.
 
 ### End-to-end execution flow
 
@@ -239,6 +544,14 @@ the raw input from the S3 `input/` prefix, `02_feature_engineering` creates
 the model features, and `03_feature_store` writes the offline and online
 features. `04_train_model` trains a challenger and logs its model, metrics,
 and metadata to the SageMaker MLflow Tracking Server.
+
+Preprocessing treats `actual_cost` as a required training label. Rows where
+`actual_cost` is missing are excluded from the training dataset and written to
+`processed/ops_data_quality_review.csv` (or `data/02_processed/` locally) for
+the Ops team to verify and backfill. The pipeline never imputes a missing
+actual cost, because doing so would create a fabricated target. Missing
+`sales` is median-imputed within `product_id` and `region`; if no such median
+exists, that row is also sent to the Ops review file.
 
 `05_register_model` compares the challenger `test_mape` with the current
 champion. The first registered model is promoted automatically. On later

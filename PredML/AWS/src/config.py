@@ -89,6 +89,7 @@ PREVIOUS_ALIAS = "previous"
 
 RAW_FILE = s3_path("input", "raw_data.csv")
 PROCESSED_FILE = s3_path("processed", "transactions_clean.parquet")
+OPS_REVIEW_FILE = s3_path("processed", "ops_data_quality_review.csv")
 OFFLINE_FILE = s3_path("features", "offline", "features.parquet")
 ONLINE_FILE = s3_path("features", "online", "latestr_features.json")
 PRODUCT_MASTER_FILE = s3_path("input", "product_master.json")
