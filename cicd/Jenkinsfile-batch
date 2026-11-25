@@ -73,7 +73,7 @@ pipeline {
                     docker tag "%BATCH_REPOSITORY%:latest" "%ECR_REGISTRY%/%BATCH_REPOSITORY%:%BUILD_NUMBER%"
                     docker push "%ECR_REGISTRY%/%BATCH_REPOSITORY%:%BUILD_NUMBER%"
                     if errorlevel 1 exit /b 1
-                    powershell.exe -NoProfile -ExecutionPolicy Bypass -File cicd\cleanup_ecr_images.ps1 ^
+                    powershell.exe -NoProfile -ExecutionPolicy Bypass -File cicd/cleanup_ecr_images.ps1 ^
                         -RepositoryName "%BATCH_REPOSITORY%" ^
                         -Region "%AWS_REGION%" ^
                         -LocalImageReferences "predml-batch:latest;%ECR_REGISTRY%/%BATCH_REPOSITORY%:latest;%ECR_REGISTRY%/%BATCH_REPOSITORY%:%BUILD_NUMBER%" ^
@@ -112,7 +112,7 @@ pipeline {
                     docker tag "%API_REPOSITORY%:latest" "%ECR_REGISTRY%/%API_REPOSITORY%:%BUILD_NUMBER%"
                     docker push "%ECR_REGISTRY%/%API_REPOSITORY%:%BUILD_NUMBER%"
                     if errorlevel 1 exit /b 1
-                    powershell.exe -NoProfile -ExecutionPolicy Bypass -File cicd\cleanup_ecr_images.ps1 ^
+                    powershell.exe -NoProfile -ExecutionPolicy Bypass -File cicd/cleanup_ecr_images.ps1 ^
                         -RepositoryName "%API_REPOSITORY%" ^
                         -Region "%AWS_REGION%" ^
                         -LocalImageReferences "predml-api:latest;%ECR_REGISTRY%/%API_REPOSITORY%:latest;%ECR_REGISTRY%/%API_REPOSITORY%:%BUILD_NUMBER%" ^
