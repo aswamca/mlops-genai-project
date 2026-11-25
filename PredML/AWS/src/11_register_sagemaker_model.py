@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 import tarfile
 import tempfile
 from pathlib import Path
@@ -144,6 +146,26 @@ def register_champion() -> str:
             f"MLflow champion {MLFLOW_REGISTERED_MODEL_NAME} v{mlflow_version} "
             "has no feature_columns tag."
         )
+    try:
+        feature_column_names = json.loads(feature_columns)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(
+            f"MLflow champion {MLFLOW_REGISTERED_MODEL_NAME} v{mlflow_version} "
+            "has an invalid feature_columns tag."
+        ) from error
+    if not isinstance(feature_column_names, list) or not all(
+        isinstance(column, str) for column in feature_column_names
+    ):
+        raise RuntimeError(
+            f"MLflow champion {MLFLOW_REGISTERED_MODEL_NAME} v{mlflow_version} "
+            "has an invalid feature_columns tag."
+        )
+    feature_columns_metadata = " ".join(feature_column_names)
+    if not re.fullmatch(r"[\w .:/=+\-@]{1,256}", feature_columns_metadata):
+        raise RuntimeError(
+            "SageMaker feature_columns metadata must use SageMaker-supported "
+            "characters and be at most 256 characters long."
+        )
     model_data_url = _upload_model_archive(mlflow_version)
     metrics = {
         key: str(value)
@@ -155,7 +177,7 @@ def register_champion() -> str:
         "mlflow_model_version": mlflow_version,
         "mlflow_run_id": (champion.tags or {}).get("run_id", "unknown"),
         "approval_source": "mlflow_champion",
-        "feature_columns": feature_columns,
+        "feature_columns": feature_columns_metadata,
         **metrics,
     }
     response = client.create_model_package(
