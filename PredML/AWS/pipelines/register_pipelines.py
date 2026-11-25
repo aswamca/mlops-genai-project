@@ -1,7 +1,8 @@
 """Create or update the PredML SageMaker pipeline definitions.
 
-The pipeline steps run the stages from the batch ECR image. Model tracking and
-registration are performed by the SageMaker MLflow Tracking Server.
+The pipeline steps run the stages from the batch ECR image. MLflow remains the
+authoritative experiment and champion registry; the final training step mirrors
+the current champion into SageMaker Model Registry for a separate approval flow.
 """
 
 from __future__ import annotations
@@ -134,6 +135,7 @@ def register_pipelines(
             ("FeatureStore", "03_feature_store"),
             ("TrainModel", "04_train_model"),
             ("RegisterModel", "05_register_model"),
+            ("RegisterSageMakerModel", "11_register_sagemaker_model"),
         ],
         batch_name: [("BatchInference", "06_batch_inference")],
         monitoring_name: [("ModelMonitoring", "08_model_monitoring")],

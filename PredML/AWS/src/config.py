@@ -83,6 +83,10 @@ MLFLOW_EXPERIMENT = os.environ.get("MLFLOW_EXPERIMENT", "pharmacy_cost_forecasti
 MLFLOW_REGISTERED_MODEL_NAME = os.environ.get(
     "MLFLOW_REGISTERED_MODEL_NAME", "cost-forecaster"
 )
+SAGEMAKER_MODEL_PACKAGE_GROUP = os.environ.get(
+    "SAGEMAKER_MODEL_PACKAGE_GROUP", "predml-cost-forecaster"
+)
+SAGEMAKER_XGBOOST_VERSION = os.environ.get("SAGEMAKER_XGBOOST_VERSION", "1.7-1")
 MLFLOW_ARTIFACTS = os.environ.get("MLFLOW_ARTIFACTS", s3_path("mlflow-artifacts"))
 CHAMPION_ALIAS = "champion"
 PREVIOUS_ALIAS = "previous"

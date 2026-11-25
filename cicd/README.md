@@ -384,10 +384,12 @@ Terraform-created `input/` prefix:
 `s3://<bucket>/<prefix>/input/raw_data.csv` before running stage
 `01_preprocess`. AWS stages use the Terraform-created `processed/`,
 `features/`, `models/`, `output/`, `monitoring/`, and `mlflow-artifacts/`
-prefixes. The AWS implementation keeps
-`mlflow_registry.py` because the SageMaker MLflow Tracking Server currently
-provides model registration, aliases, and promotion; it can be replaced later
-when SageMaker Model Registry is adopted.
+prefixes. The AWS implementation keeps `mlflow_registry.py` as the authoritative
+experiment and champion/challenger registry. After the unchanged MLflow
+promotion step, stage `11_register_sagemaker_model` mirrors the current
+champion into SageMaker Model Registry with `PendingManualApproval`. This
+stage does not create an endpoint. Endpoint deployment is a later,
+approval-triggered extension.
 
 #### Connect Jenkins to GitHub
 

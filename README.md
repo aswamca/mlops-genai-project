@@ -527,16 +527,16 @@ SageMaker training pipeline
         v
 MLflow champion/challenger decision
         |
-        +-- challenger rejected --> stop; no inference is started
+        +-- challenger rejected --> retain current champion
+        |                           SageMaker step mirrors it only if missing
         |
         +-- champion promoted
-                |
-                +--> batch inference pipeline
-                |      06_batch_inference
-                |      predictions written to S3
-                |
-                +--> realtime inference pipeline
-                       API loads the champion model
+                v
+  11_register_sagemaker_model
+        |
+        +--> SageMaker Model Registry
+             PendingManualApproval
+             (no endpoint created yet)
 ```
 
 The stages in the training pipeline run sequentially. `01_preprocess` reads
@@ -558,6 +558,22 @@ champion. The first registered model is promoted automatically. On later
 runs, the challenger is promoted only when it improves the champion. A
 successful promotion assigns the MLflow `champion` alias and writes
 `models/cost_forecaster/champion_promotion.json` to S3.
+
+After stage 5, AWS-only stage `11_register_sagemaker_model` mirrors the
+current MLflow champion into the SageMaker Model Registry. It creates a model
+package group named `predml-cost-forecaster` if needed and marks each new
+package `PendingManualApproval`. It does not change MLflow registration,
+approve the SageMaker package, or create/update an endpoint. Re-running the
+stage for the same MLflow version detects the existing package and skips it.
+If a challenger is rejected, the SageMaker step sees the unchanged current
+champion; it registers that champion only if it has not yet been mirrored.
+
+The future deployment extension should start only after an authorized person
+changes the SageMaker package status to `Approved`. A separate deployment
+pipeline, triggered by a SageMaker Model Package State Change event, can then
+create a SageMaker Model, endpoint configuration and endpoint. Endpoint
+creation, update, traffic shifting and rollback are intentionally not part of
+the current stage.
 
 The trigger Jenkins job records the promotion marker before starting
 training, waits for the SageMaker execution to finish, and compares the

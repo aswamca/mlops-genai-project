@@ -47,6 +47,7 @@ pipeline {
                     changeset 'PredML/AWS/src/03_feature_store.py'
                     changeset 'PredML/AWS/src/04_train_model.py'
                     changeset 'PredML/AWS/src/05_register_model.py'
+                    changeset 'PredML/AWS/src/11_register_sagemaker_model.py'
                     changeset 'PredML/AWS/src/06_batch_inference.py'
                     changeset 'PredML/AWS/src/08_model_monitoring.py'
                     changeset 'PredML/AWS/src/09_forecast.py'
