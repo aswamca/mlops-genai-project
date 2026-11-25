@@ -134,7 +134,7 @@ def register_pipelines(
             ("FeatureEngineering", "02_feature_engineering"),
             ("FeatureStore", "03_feature_store"),
             ("TrainModel", "04_train_model"),
-            ("RegisterModel", "05_register_model"),
+            ("RegisterModelMlFlow", "05_register_model"),
             ("RegisterSageMakerModel", "11_register_sagemaker_model"),
         ],
         batch_name: [("BatchInference", "06_batch_inference")],
