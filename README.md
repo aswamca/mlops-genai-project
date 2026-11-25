@@ -442,6 +442,13 @@ Run `PredML-Images` in Jenkins. It builds and pushes:
 - `predml-api:<build-number>`
 - `predml-api:latest`
 
+Use **Build with Parameters** and select `BUILD_TARGET`:
+
+- `auto` builds the image(s) affected by changed files (the default for push triggers).
+- `batch` builds only the batch image.
+- `api` builds only the realtime API image.
+- `both` builds both images.
+
 After a successful push, Jenkins removes those local Docker tags and keeps
 the three newest numeric build images in each ECR repository. The mutable
 `latest` tag remains on the current image.

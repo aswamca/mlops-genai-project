@@ -513,6 +513,17 @@ ECR login and push permissions.
 `PredML-Images`. Manual **Build with Parameters** or **Build Now** remains
 available for testing or for AWS deployments that need a manual run.
 
+The `BUILD_TARGET` parameter controls which images are built:
+
+- `auto` (default): build the image whose source files changed; this is used
+  for GitHub push-triggered runs.
+- `batch`: build and push only `predml-batch`.
+- `api`: build and push only `predml-api`.
+- `both`: build and push both images.
+
+To push only the realtime API, select **Build with Parameters**, choose
+`api`, and start the job. The batch build stage is skipped.
+
 GitHub cannot normally send a webhook directly to `http://localhost:8081`.
 Jenkins must be reachable through a public HTTPS endpoint, or the repository
 must use SCM polling. For webhook delivery:

@@ -1,6 +1,14 @@
 pipeline {
     agent any
 
+    parameters {
+        choice(
+            name: 'BUILD_TARGET',
+            choices: ['auto', 'both', 'batch', 'api'],
+            description: 'Choose which image(s) to build and push. Auto builds images affected by source changes.'
+        )
+    }
+
     triggers {
         // Trigger this job when GitHub sends a push-event webhook.
         // Configure the Jenkins GitHub webhook at: /github-webhook/
@@ -36,25 +44,30 @@ pipeline {
         }
 
         stage('Build & Push predml-batch') {
-            // Rebuild the image only when the batch source changes.
             when {
                 anyOf {
-                    changeset 'cicd/Jenkinsfile-batch'
-                    changeset 'cicd/cleanup_ecr_images.ps1'
-                    changeset 'PredML/AWS/src/config.py'
-                    changeset 'PredML/AWS/src/mlflow_registry.py'
-                    changeset 'PredML/AWS/src/requirements-aws.txt'
-                    changeset 'PredML/AWS/src/01_preprocess.py'
-                    changeset 'PredML/AWS/src/02_feature_engineering.py'
-                    changeset 'PredML/AWS/src/03_feature_store.py'
-                    changeset 'PredML/AWS/src/04_train_model.py'
-                    changeset 'PredML/AWS/src/05_register_model.py'
-                    changeset 'PredML/AWS/src/11_register_sagemaker_model.py'
-                    changeset 'PredML/AWS/src/06_batch_inference.py'
-                    changeset 'PredML/AWS/src/08_model_monitoring.py'
-                    changeset 'PredML/AWS/src/09_forecast.py'
-                    changeset 'PredML/AWS/src/10_rollback.py'
-                    changeset 'PredML/docker/batch.Dockerfile'
+                    expression { params.BUILD_TARGET in ['both', 'batch'] }
+                    allOf {
+                        expression { params.BUILD_TARGET == 'auto' }
+                        anyOf {
+                            changeset 'cicd/Jenkinsfile-batch'
+                            changeset 'cicd/cleanup_ecr_images.ps1'
+                            changeset 'PredML/AWS/src/config.py'
+                            changeset 'PredML/AWS/src/mlflow_registry.py'
+                            changeset 'PredML/AWS/src/requirements-aws.txt'
+                            changeset 'PredML/AWS/src/01_preprocess.py'
+                            changeset 'PredML/AWS/src/02_feature_engineering.py'
+                            changeset 'PredML/AWS/src/03_feature_store.py'
+                            changeset 'PredML/AWS/src/04_train_model.py'
+                            changeset 'PredML/AWS/src/05_register_model.py'
+                            changeset 'PredML/AWS/src/11_register_sagemaker_model.py'
+                            changeset 'PredML/AWS/src/06_batch_inference.py'
+                            changeset 'PredML/AWS/src/08_model_monitoring.py'
+                            changeset 'PredML/AWS/src/09_forecast.py'
+                            changeset 'PredML/AWS/src/10_rollback.py'
+                            changeset 'PredML/docker/batch.Dockerfile'
+                        }
+                    }
                 }
             }
             steps {
@@ -86,14 +99,20 @@ pipeline {
         stage('Build & Push realtime API') {
             when {
                 anyOf {
-                    changeset 'cicd/Jenkinsfile-batch'
-                    changeset 'cicd/cleanup_ecr_images.ps1'
-                    changeset 'PredML/src/config.py'
-                    changeset 'PredML/src/mlflow_registry.py'
-                    changeset 'PredML/src/07_realtime_inference.py'
-                    changeset 'PredML/src/09_forecast.py'
-                    changeset 'PredML/docker/api.Dockerfile'
-                    changeset 'PredML/docker/requirements-api.txt'
+                    expression { params.BUILD_TARGET in ['both', 'api'] }
+                    allOf {
+                        expression { params.BUILD_TARGET == 'auto' }
+                        anyOf {
+                            changeset 'cicd/Jenkinsfile-batch'
+                            changeset 'cicd/cleanup_ecr_images.ps1'
+                            changeset 'PredML/src/config.py'
+                            changeset 'PredML/src/mlflow_registry.py'
+                            changeset 'PredML/src/07_realtime_inference.py'
+                            changeset 'PredML/src/09_forecast.py'
+                            changeset 'PredML/docker/api.Dockerfile'
+                            changeset 'PredML/docker/requirements-api.txt'
+                        }
+                    }
                 }
             }
             steps {
