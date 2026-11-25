@@ -33,7 +33,18 @@ def _ensure_package_group(client: Any) -> None:
             ModelPackageGroupName=SAGEMAKER_MODEL_PACKAGE_GROUP
         )
     except ClientError as error:
-        if error.response.get("Error", {}).get("Code") != "ResourceNotFound":
+        error_details = error.response.get("Error", {})
+        error_code = error_details.get("Code")
+        error_message = error_details.get("Message", "")
+        group_is_missing = (
+            error_code in {"ResourceNotFound", "ResourceNotFoundException"}
+            or (
+                error_code == "ValidationException"
+                and SAGEMAKER_MODEL_PACKAGE_GROUP in error_message
+                and "does not exist" in error_message
+            )
+        )
+        if not group_is_missing:
             raise
         client.create_model_package_group(
             ModelPackageGroupName=SAGEMAKER_MODEL_PACKAGE_GROUP,
