@@ -439,7 +439,12 @@ Run `PredML-Images` in Jenkins. It builds and pushes:
 
 - `predml-batch:<build-number>`
 - `predml-batch:latest`
+- `predml-api:<build-number>`
 - `predml-api:latest`
+
+After a successful push, Jenkins removes those local Docker tags and keeps
+the three newest numeric build images in each ECR repository. The mutable
+`latest` tag remains on the current image.
 
 When running the SageMaker trigger manually, enter only the immutable batch image tag, such as `16`, in `ECR_IMAGE_TAG`. Do not enter a full image URI or `ECR_IMAGE_TAG=16`.
 

@@ -39,6 +39,8 @@ pipeline {
             // Rebuild the image only when the batch source changes.
             when {
                 anyOf {
+                    changeset 'cicd/Jenkinsfile-batch'
+                    changeset 'cicd/cleanup_ecr_images.ps1'
                     changeset 'PredML/AWS/src/config.py'
                     changeset 'PredML/AWS/src/mlflow_registry.py'
                     changeset 'PredML/AWS/src/requirements-aws.txt'
@@ -70,6 +72,13 @@ pipeline {
                     if errorlevel 1 exit /b 1
                     docker tag "%BATCH_REPOSITORY%:latest" "%ECR_REGISTRY%/%BATCH_REPOSITORY%:%BUILD_NUMBER%"
                     docker push "%ECR_REGISTRY%/%BATCH_REPOSITORY%:%BUILD_NUMBER%"
+                    if errorlevel 1 exit /b 1
+                    powershell.exe -NoProfile -ExecutionPolicy Bypass -File cicd\cleanup_ecr_images.ps1 ^
+                        -RepositoryName "%BATCH_REPOSITORY%" ^
+                        -Region "%AWS_REGION%" ^
+                        -LocalImageReferences "predml-batch:latest;%ECR_REGISTRY%/%BATCH_REPOSITORY%:latest;%ECR_REGISTRY%/%BATCH_REPOSITORY%:%BUILD_NUMBER%" ^
+                        -KeepBuildImages 3
+                    if errorlevel 1 exit /b 1
                 '''
             }
         }
@@ -77,6 +86,8 @@ pipeline {
         stage('Build & Push realtime API') {
             when {
                 anyOf {
+                    changeset 'cicd/Jenkinsfile-batch'
+                    changeset 'cicd/cleanup_ecr_images.ps1'
                     changeset 'PredML/src/config.py'
                     changeset 'PredML/src/mlflow_registry.py'
                     changeset 'PredML/src/07_realtime_inference.py'
@@ -97,6 +108,16 @@ pipeline {
                     if errorlevel 1 exit /b 1
                     docker tag "%API_REPOSITORY%:latest" "%ECR_REGISTRY%/%API_REPOSITORY%:latest"
                     docker push "%ECR_REGISTRY%/%API_REPOSITORY%:latest"
+                    if errorlevel 1 exit /b 1
+                    docker tag "%API_REPOSITORY%:latest" "%ECR_REGISTRY%/%API_REPOSITORY%:%BUILD_NUMBER%"
+                    docker push "%ECR_REGISTRY%/%API_REPOSITORY%:%BUILD_NUMBER%"
+                    if errorlevel 1 exit /b 1
+                    powershell.exe -NoProfile -ExecutionPolicy Bypass -File cicd\cleanup_ecr_images.ps1 ^
+                        -RepositoryName "%API_REPOSITORY%" ^
+                        -Region "%AWS_REGION%" ^
+                        -LocalImageReferences "predml-api:latest;%ECR_REGISTRY%/%API_REPOSITORY%:latest;%ECR_REGISTRY%/%API_REPOSITORY%:%BUILD_NUMBER%" ^
+                        -KeepBuildImages 3
+                    if errorlevel 1 exit /b 1
                 '''
             }
         }
