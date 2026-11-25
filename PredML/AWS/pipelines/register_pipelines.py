@@ -18,6 +18,7 @@ from botocore.exceptions import ClientError
 def _processing_step(
     name: str,
     stage: str,
+    description: str,
     image_uri: str,
     role_arn: str,
     bucket: str,
@@ -27,6 +28,7 @@ def _processing_step(
     step: dict[str, Any] = {
         "Name": name,
         "Type": "Processing",
+        "Description": description,
         "Arguments": {
             "ProcessingResources": {
                 "ClusterConfig": {
@@ -54,7 +56,7 @@ def _processing_step(
 
 
 def _pipeline_definition(
-    stages: list[tuple[str, str]],
+    stages: list[tuple[str, str, str]],
     image_uri: str,
     role_arn: str,
     bucket: str,
@@ -63,11 +65,12 @@ def _pipeline_definition(
 ) -> str:
     steps: list[dict[str, Any]] = []
     previous: list[str] = []
-    for name, stage in stages:
+    for name, stage, description in stages:
         steps.append(
             _processing_step(
                 name,
                 stage,
+                description,
                 image_uri,
                 role_arn,
                 bucket,
@@ -130,16 +133,58 @@ def register_pipelines(
         image_uri = f"{image_uri}:latest"
     definitions = {
         training_name: [
-            ("Preprocess", "01_preprocess"),
-            ("FeatureEngineering", "02_feature_engineering"),
-            ("FeatureStore", "03_feature_store"),
-            ("TrainModel", "04_train_model"),
-            ("RegisterModelMlFlow", "05_register_model"),
-            ("RegisterSageMakerModel", "11_register_sagemaker_model"),
+            (
+                "Preprocess",
+                "01_preprocess",
+                "Clean raw data and route invalid rows to Ops review.",
+            ),
+            (
+                "FeatureEngineering",
+                "02_feature_engineering",
+                "Create lag and ratio features for model training.",
+            ),
+            (
+                "FeatureStore",
+                "03_feature_store",
+                "Publish engineered features to SageMaker Feature Store.",
+            ),
+            (
+                "TrainModel",
+                "04_train_model",
+                "Train and evaluate the XGBoost cost forecasting model.",
+            ),
+            (
+                "RegisterModelMlFlow",
+                "05_register_model",
+                "Compare model metrics and promote a better model as MLflow champion.",
+            ),
+            (
+                "RegisterSageMakerModel",
+                "11_register_sagemaker_model",
+                "Register the MLflow champion as a pending SageMaker model package.",
+            ),
         ],
-        batch_name: [("BatchInference", "06_batch_inference")],
-        monitoring_name: [("ModelMonitoring", "08_model_monitoring")],
-        rollback_name: [("Rollback", "10_rollback")],
+        batch_name: [
+            (
+                "BatchInference",
+                "06_batch_inference",
+                "Score batch data with the current MLflow champion.",
+            )
+        ],
+        monitoring_name: [
+            (
+                "ModelMonitoring",
+                "08_model_monitoring",
+                "Measure prediction drift and write the monitoring report.",
+            )
+        ],
+        rollback_name: [
+            (
+                "Rollback",
+                "10_rollback",
+                "Restore the previous MLflow champion after a failed promotion.",
+            )
+        ],
     }
     for name, stages in definitions.items():
         _upsert(

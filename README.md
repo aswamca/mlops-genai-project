@@ -432,6 +432,8 @@ python .\cicd\register_sagemaker_pipelines.py
 ```
 
 The pipeline registration script creates the training and inference pipelines used by Jenkins.
+Each execution-graph step has a description of its specific work instead of a
+generic “Process data” label.
 
 ### 6. Build and push images
 
