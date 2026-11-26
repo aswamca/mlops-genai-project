@@ -24,6 +24,7 @@ def _processing_step(
     bucket: str,
     tracking_uri: str,
     depends_on: list[str] | None = None,
+    container_arguments: list[str] | None = None,
 ) -> dict[str, Any]:
     step: dict[str, Any] = {
         "Name": name,
@@ -50,6 +51,10 @@ def _processing_step(
             "RoleArn": role_arn,
         },
     }
+    if container_arguments:
+        step["Arguments"]["AppSpecification"]["ContainerArguments"] = (
+            container_arguments
+        )
     if depends_on:
         step["DependsOn"] = depends_on
     return step
@@ -62,6 +67,7 @@ def _pipeline_definition(
     bucket: str,
     region: str,
     tracking_uri: str,
+    container_arguments: list[str] | None = None,
 ) -> str:
     steps: list[dict[str, Any]] = []
     previous: list[str] = []
@@ -76,6 +82,7 @@ def _pipeline_definition(
                 bucket,
                 tracking_uri,
                 previous or None,
+                container_arguments,
             )
         )
         previous = [name]
@@ -127,6 +134,7 @@ def register_pipelines(
     batch_name: str,
     monitoring_name: str,
     rollback_name: str,
+    monitoring_baseline_name: str = "PredML-Monitoring-Baseline-Pipeline",
 ) -> None:
     client = boto3.client("sagemaker", region_name=region)
     if ":" not in image_uri.rsplit("/", 1)[-1]:
@@ -195,6 +203,26 @@ def register_pipelines(
             ),
             role_arn,
         )
+    _upsert(
+        client,
+        monitoring_baseline_name,
+        _pipeline_definition(
+            [
+                (
+                    "CreateMonitoringBaseline",
+                    "08_model_monitoring",
+                    "Create reference statistics and constraints from offline training data.",
+                )
+            ],
+            image_uri,
+            role_arn,
+            bucket,
+            region,
+            tracking_uri,
+            container_arguments=["baseline"],
+        ),
+        role_arn,
+    )
 
 
 def main() -> None:
@@ -209,6 +237,10 @@ def main() -> None:
     parser.add_argument(
         "--monitoring-name", default="PredML-Monitoring-Pipeline"
     )
+    parser.add_argument(
+        "--monitoring-baseline-name",
+        default="PredML-Monitoring-Baseline-Pipeline",
+    )
     parser.add_argument("--rollback-name", default="PredML-Rollback-Pipeline")
     args = parser.parse_args()
     register_pipelines(
@@ -221,6 +253,7 @@ def main() -> None:
         batch_name=args.batch_name,
         monitoring_name=args.monitoring_name,
         rollback_name=args.rollback_name,
+        monitoring_baseline_name=args.monitoring_baseline_name,
     )
 
 

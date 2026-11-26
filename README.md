@@ -619,6 +619,22 @@ offline feature data from S3, scores the configured inference window, and
 writes timestamped prediction files below
 `output/predictions/batch/`.
 
+When MLflow loads the model, it downloads the model's artifact bundle. The
+batch log's `Downloading artifacts: ... 5/5` line reports the files in that
+bundle; the exact file list can vary with MLflow and model versions. For this
+XGBoost model, the bundle typically includes:
+
+- `model.xgb`: the trained XGBoost model.
+- `MLmodel`: MLflow metadata describing the model and its supported flavor.
+- `conda.yaml`, `python_env.yaml`, and `requirements.txt`: environment and
+  dependency information used to load or reproduce the model.
+
+The `.xgb` artifact belongs to MLflow's model bundle. Separately, stage
+`11_register_sagemaker_model` packages the champion as `model.tar.gz` with an
+`xgboost-model` file inside, uploads it to S3, and registers that S3 artifact
+with SageMaker Model Registry. This SageMaker package does not replace the
+MLflow artifact or change which registry batch inference loads from.
+
 S3 stores the datasets, feature files, model artifacts, and prediction
 outputs. MLflow stores the registry state that identifies which model version
 is the current champion. Therefore the SageMaker MLflow Tracking Server must
@@ -626,6 +642,19 @@ be running and reachable for both training/registration and batch inference.
 The inference container receives the same `MLFLOW_TRACKING_URI` as the
 training container. Use the Terraform-created tracking-server ARN; do not
 replace it with a local MLflow URL.
+
+### Create the monitoring baseline
+
+The monitoring pipeline compares new predictions with baseline statistics,
+which must exist first. Registering SageMaker pipelines also creates the
+separate `PredML-Monitoring-Baseline-Pipeline`. After running the Terraform
+Jenkins job with `TF_ACTION=apply`, start that baseline pipeline manually once
+from the SageMaker Pipelines console. It runs `08_model_monitoring.py baseline`
+against the offline feature data and writes the baseline files under
+`monitoring/baseline/` in S3. After it succeeds, run
+`PredML-Monitoring-Pipeline` for normal drift checks. Do not run baseline
+creation on every monitoring execution; refresh it deliberately when the
+production model or its reference data changes.
 
 The realtime API uses the same champion alias. At startup it resolves and
 loads the champion model, validates its feature contract, loads the online
